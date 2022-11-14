@@ -1,8 +1,8 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
+from bayesian_torch.layers import Conv2dReparameterization
 
 backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
 
@@ -309,6 +309,53 @@ class SegmentHead(nn.Module):
         return feat
 
 
+class BayesSegmentHead(nn.Module):
+    """Add VB conv layer to output.
+
+    Makes the final convulutional layer in this model a variational bayes layer,
+    so we can use it to approximate uncertainty in our model.
+    """
+
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True):
+        super(BayesSegmentHead, self).__init__()
+        self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
+        self.drop = nn.Dropout(0.1)
+        self.up_factor = up_factor
+
+        out_chan = n_classes
+        mid_chan2 = up_factor * up_factor if aux else mid_chan
+        up_factor = up_factor // 2 if aux else up_factor
+        # this is where I am changing things. Am changing the conv out into multiple stages
+        # so I can make it a bit bayesian
+        self.conv_pre_out = nn.Sequential(
+                nn.Upsample(scale_factor=2),
+                ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
+                ) if aux else nn.Identity()
+        self.conv_bayes = Conv2dReparameterization(mid_chan2,  out_chan, 1, 1, 0, bias=True)
+        self.upscale_output = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
+
+    def forward(self, x):
+        feat = self.conv(x)
+        feat = self.drop(feat)
+        # feat = self.conv_pre_out(feat)
+        feat, kl = self.conv_bayes(feat, return_kl=True)
+        feat = self.upscale_output(feat)
+        return feat, kl
+
+    def forward_bayes(self, x):
+        raise NotImplementedError('To be implemented')
+
+        self.conv_out = nn.Sequential(
+            nn.Sequential(
+                nn.Upsample(scale_factor=2),
+                ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
+                ) if aux else nn.Identity(),
+            nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True),
+            nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
+        )
+
+
+
 class BiSeNetV2(nn.Module):
 
     def __init__(self, n_classes, aux_mode='train'):
@@ -386,6 +433,89 @@ class BiSeNetV2(nn.Module):
             else:
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
+
+class BayesBiSeNetV2(nn.Module):
+
+    def __init__(self, n_classes, aux_mode='train'):
+        super(BayesBiSeNetV2, self).__init__()
+        print('here')
+        self.aux_mode = aux_mode
+        self.detail = DetailBranch()
+        self.segment = SegmentBranch()
+        self.bga = BGALayer()
+
+        ## TODO: what is the number of mid chan ?
+        self.head = BayesSegmentHead(128, 1024, n_classes, up_factor=8, aux=False)
+        if self.aux_mode == 'train':
+            self.aux2 = SegmentHead(16, 128, n_classes, up_factor=4)
+            self.aux3 = SegmentHead(32, 128, n_classes, up_factor=8)
+            self.aux4 = SegmentHead(64, 128, n_classes, up_factor=16)
+            self.aux5_4 = SegmentHead(128, 128, n_classes, up_factor=32)
+
+        self.init_weights()
+
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+                if hasattr(module, 'last_bn') and module.last_bn:
+                    nn.init.zeros_(module.weight)
+                else:
+                    nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
+        self.load_pretrain()
+        # self.init
+
+    def load_pretrain(self):
+        state = modelzoo.load_url(backbone_url)
+        for name, child in self.named_children():
+            if name in state.keys():
+                child.load_state_dict(state[name], strict=True)
+
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4:
+                    wd_params.append(param)
+                else:
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
+    def forward(self, x):
+        size = x.size()[2:]
+        feat_d = self.detail(x)
+        feat2, feat3, feat4, feat5_4, feat_s = self.segment(x)
+        feat_head = self.bga(feat_d, feat_s)
+
+        logits, kl = self.head(feat_head)
+        if self.aux_mode == 'train':
+            logits_aux2 = self.aux2(feat2)
+            logits_aux3 = self.aux3(feat3)
+            logits_aux4 = self.aux4(feat4)
+            logits_aux5_4 = self.aux5_4(feat5_4)
+            return logits, kl, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
+        elif self.aux_mode == 'eval':
+            return logits,
+        elif self.aux_mode == 'pred':
+            pred = logits.argmax(dim=1)
+            return pred
+        else:
+            raise NotImplementedError
+
+
+
 
 
 

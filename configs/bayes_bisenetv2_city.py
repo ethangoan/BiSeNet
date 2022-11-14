@@ -1,13 +1,14 @@
+#!/usr/bin/env python3
 
 ## bisenetv2
 cfg = dict(
-    model_type='bisenetv2',
+    model_type='bayes_bisenetv2',
     n_cats=19,
     num_aux_heads=4,
-    lr_start=5e-3,
-    weight_decay=5e-4,
-    warmup_iters=1000,
-    max_iter=150000,
+    lr_start=5e-4,
+    weight_decay=0.0,#e-4,
+    warmup_iters=1500,
+    max_iter=14000,
     dataset='CityScapes',
     im_root='/home/ethan/exp_data/cityscapes',
     train_im_anns='./datasets/cityscapes/train.txt',
