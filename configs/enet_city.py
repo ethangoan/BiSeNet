@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-## bisenetv2
+
+## enet
 cfg = dict(
-    model_type='bayes_bisenetv2',
+    model_type='enet',
     n_cats=19,
-    num_aux_heads=4,
-    lr_start=1e-3,
-    weight_decay=1e-4,
+    num_aux_heads=0,
+    lr_start=5e-3,
+    weight_decay=5e-4,
     warmup_iters=100,
-    max_iter=200,
+    max_iter=50000,
     dataset='CityScapes',
     im_root='/home/ethan/exp_data/cityscapes',
     train_im_anns='./datasets/cityscapes/train.txt',
@@ -17,9 +18,9 @@ cfg = dict(
     cropsize=[512, 1024],
     eval_crop=[1024, 1024],
     eval_scales=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-    ims_per_gpu=1,
-    eval_ims_per_gpu=1,
-    use_fp16=False,
+    ims_per_gpu=12,
+    eval_ims_per_gpu=2,
+    use_fp16=True,
     use_sync_bn=True,
-    respth='./res',
+    respth='./res_enet_city',
 )

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
-from bayesian_torch.layers import Conv2dReparameterization
+from bayesian_torch.layers import Conv2dReparameterization, Conv2dFlipout
 
 backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
 
@@ -284,29 +284,34 @@ class BGALayer(nn.Module):
 
 class SegmentHead(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True):
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True, bayes=False):
         super(SegmentHead, self).__init__()
         self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
-        self.drop = nn.Dropout(0.1)
+        self.drop = nn.Dropout(0.1) if aux else nn.Identity()
         self.up_factor = up_factor
 
         out_chan = n_classes
         mid_chan2 = up_factor * up_factor if aux else mid_chan
         up_factor = up_factor // 2 if aux else up_factor
-        self.conv_out = nn.Sequential(
-            nn.Sequential(
-                nn.Upsample(scale_factor=2),
-                ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
-                ) if aux else nn.Identity(),
-            nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True),
-            nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
-        )
+        self.conv_pre = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
+            ) if aux else nn.Identity()
+        self.conv_out = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
+        self.upsample = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
+        self.conv_var = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True) if bayes else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x, return_var=False):
         feat = self.conv(x)
-        feat = self.drop(feat)
+        feat_basis = self.conv_pre(feat)
+        feat = self.drop(feat_basis)
         feat = self.conv_out(feat)
-        return feat
+        logits = self.upsample(feat)
+        if return_var:
+            var = self.upsample(self.conv_var(feat_basis ** 2.0))
+            return logits, var
+        else:
+            return logits
 
 
 class BayesSegmentHead(nn.Module):
@@ -331,16 +336,18 @@ class BayesSegmentHead(nn.Module):
                 nn.Upsample(scale_factor=2),
                 ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
                 ) if aux else nn.Identity()
-        self.conv_bayes = Conv2dReparameterization(mid_chan2,  out_chan, 1, 1, 0, bias=True)
+        # self.conv_bayes = Conv2dReparameterization(mid_chan2,  out_chan, 1, 1, 0, bias=True)
+        self.conv_bayes = nn.Conv2d(mid_chan2,  out_chan, 1, 1, 0, bias=True)
         self.upscale_output = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
 
     def forward(self, x):
-        feat = self.conv(x)
-        feat = self.drop(feat)
-        # feat = self.conv_pre_out(feat)
-        feat, kl = self.conv_bayes(feat, return_kl=True)
+        feat_basis = self.conv(x)
+        # feat = self.drop(feat)
+        # feat, kl = self.conv_bayes(feat_basis, return_kl=True)
+        feat = self.conv_bayes(feat_basis)
+        kl = 0.0
         feat = self.upscale_output(feat)
-        return feat, kl
+        return feat, kl, feat_basis
 
     def forward_bayes(self, x):
         raise NotImplementedError('To be implemented')
@@ -364,15 +371,17 @@ class BiSeNetV2(nn.Module):
         self.detail = DetailBranch()
         self.segment = SegmentBranch()
         self.bga = BGALayer()
+        self.bayes = ('bayes' in aux_mode)
 
         ## TODO: what is the number of mid chan ?
-        self.head = SegmentHead(128, 1024, n_classes, up_factor=8, aux=False)
+        self.head = SegmentHead(128, 1024, n_classes,
+                                up_factor=8, aux=False,
+                                bayes=self.bayes)
         if self.aux_mode == 'train':
             self.aux2 = SegmentHead(16, 128, n_classes, up_factor=4)
             self.aux3 = SegmentHead(32, 128, n_classes, up_factor=8)
             self.aux4 = SegmentHead(64, 128, n_classes, up_factor=16)
             self.aux5_4 = SegmentHead(128, 128, n_classes, up_factor=32)
-
         self.init_weights()
 
     def forward(self, x):
@@ -381,7 +390,7 @@ class BiSeNetV2(nn.Module):
         feat2, feat3, feat4, feat5_4, feat_s = self.segment(x)
         feat_head = self.bga(feat_d, feat_s)
 
-        logits = self.head(feat_head)
+        logits, logit_var = self.head(feat_head, return_var=self.bayes)
         if self.aux_mode == 'train':
             logits_aux2 = self.aux2(feat2)
             logits_aux3 = self.aux3(feat3)
@@ -390,6 +399,8 @@ class BiSeNetV2(nn.Module):
             return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
             return logits,
+        elif self.aux_mode == 'eval_bayes':
+            return logits, logit_var
         elif self.aux_mode == 'pred':
             pred = logits.argmax(dim=1)
             return pred
@@ -476,9 +487,9 @@ class BayesBiSeNetV2(nn.Module):
                 child.load_state_dict(state[name], strict=True)
 
     def get_params(self):
-        def add_param_to_list(mod, wd_params, nowd_params):
+        def add_param_to_list(mod, wd_params, nowd_params, force_no_wd=False):
             for param in mod.parameters():
-                if param.dim() == 1:
+                if param.dim() == 1 or force_no_wd:
                     nowd_params.append(param)
                 elif param.dim() == 4:
                     wd_params.append(param)
@@ -487,7 +498,9 @@ class BayesBiSeNetV2(nn.Module):
 
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
         for name, child in self.named_children():
-            if 'head' in name or 'aux' in name:
+            if 'head' in name:
+                add_param_to_list(child, [], nowd_params, force_no_wd=True)
+            elif 'aux' in name:
                 add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
             else:
                 add_param_to_list(child, wd_params, nowd_params)
@@ -499,7 +512,7 @@ class BayesBiSeNetV2(nn.Module):
         feat2, feat3, feat4, feat5_4, feat_s = self.segment(x)
         feat_head = self.bga(feat_d, feat_s)
 
-        logits, kl = self.head(feat_head)
+        logits, kl, feat_basis = self.head(feat_head)
         if self.aux_mode == 'train':
             logits_aux2 = self.aux2(feat2)
             logits_aux3 = self.aux3(feat3)
@@ -511,6 +524,10 @@ class BayesBiSeNetV2(nn.Module):
         elif self.aux_mode == 'pred':
             pred = logits.argmax(dim=1)
             return pred
+        elif self.aux_mode == 'bayes':
+            # need to return the logits output, and the
+            # output directly before then
+            return logits, feat_basis
         else:
             raise NotImplementedError
 

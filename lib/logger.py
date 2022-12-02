@@ -24,18 +24,26 @@ def setup_logger(name, logpth):
     logging.root.addHandler(logging.StreamHandler())
 
 
-def print_log_msg(it, max_iter, lr, time_meter, loss_meter, loss_pre_meter,
+def print_log_msg(it, max_iter, lr, time_meter, loss_meter, kl_meter, loss_pre_meter,
         loss_aux_meters):
     t_intv, eta = time_meter.get()
     loss_avg, _ = loss_meter.get()
+    if kl_meter is not None:
+        kl_avg, _ = kl_meter.get()
+    else:
+        kl_avg = 0.0
     loss_pre_avg, _ = loss_pre_meter.get()
-    loss_aux_avg = ', '.join(['{}: {:.4f}'.format(el.name, el.get()[0]) for el in loss_aux_meters])
+    if loss_aux_meters is not None:
+        loss_aux_avg = ', '.join(['{}: {:.4f}'.format(el.name, el.get()[0]) for el in loss_aux_meters])
+    else:
+        loss_aux_avg = '0.0'
     msg = ', '.join([
         'iter: {it}/{max_it}',
         'lr: {lr:4f}',
         'eta: {eta}',
         'time: {time:.2f}',
         'loss: {loss:.4f}',
+        'kl: {kl:.4f}',
         'loss_pre: {loss_pre:.4f}',
     ]).format(
         it=it+1,
@@ -44,6 +52,7 @@ def print_log_msg(it, max_iter, lr, time_meter, loss_meter, loss_pre_meter,
         time=t_intv,
         eta=eta,
         loss=loss_avg,
+        kl=kl_avg,
         loss_pre=loss_pre_avg,
         )
     msg += ', ' + loss_aux_avg

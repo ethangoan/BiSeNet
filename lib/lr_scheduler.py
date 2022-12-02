@@ -70,6 +70,27 @@ class WarmupPolyLrScheduler(WarmupLrScheduler):
         ratio = (1 - alpha) ** self.power
         return ratio
 
+class WarmupOnlyLrScheduler(WarmupLrScheduler):
+
+    def __init__(
+            self,
+            optimizer,
+            power,
+            max_iter,
+            warmup_iter=500,
+            warmup_ratio=5e-4,
+            warmup='exp',
+            last_epoch=-1,
+    ):
+        self.power = power
+        self.max_iter = max_iter
+        super(WarmupOnlyLrScheduler, self).__init__(
+            optimizer, warmup_iter, warmup_ratio, warmup, last_epoch)
+
+    def get_main_ratio(self):
+        return 1.0
+
+
 
 class WarmupExpLrScheduler(WarmupLrScheduler):
 
