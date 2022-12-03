@@ -289,6 +289,7 @@ class SegmentHead(nn.Module):
         self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
         self.drop = nn.Dropout(0.1) if aux else nn.Identity()
         self.up_factor = up_factor
+        self.aux = aux
 
         out_chan = n_classes
         mid_chan2 = up_factor * up_factor if aux else mid_chan
@@ -310,8 +311,11 @@ class SegmentHead(nn.Module):
         if return_var:
             var = self.upsample(self.conv_var(feat_basis ** 2.0))
             return logits, var
-        else:
+        elif self.aux:
+            # if is  an aux layer, need to return just the logit
             return logits
+        else:
+            return logits, None
 
 
 class BayesSegmentHead(nn.Module):

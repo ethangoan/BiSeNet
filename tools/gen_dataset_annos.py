@@ -1,4 +1,3 @@
-
 import os
 import os.path as osp
 import argparse
@@ -76,6 +75,43 @@ def gen_ade20k():
             fw.write('\n'.join(lines))
 
 
+def gen_camvid():
+    '''
+        root_path:
+            |- images
+                |- training
+                |- validation
+            |- annotations
+                |- training
+                |- validation
+    '''
+    root_path = '/home/ethan/exp_data/camvid/CamVid/'
+    save_path = './datasets/camvid'
+
+    for mode in ('train', 'test'):
+        im_root = osp.join(root_path, f'{mode}')
+        lb_root = osp.join(root_path, f'{mode}_labels')
+
+        ims = os.listdir(im_root)
+        lbs = os.listdir(lb_root)
+
+        print(len(ims))
+        print(len(lbs))
+
+        im_names = [el.replace('.png', '') for el in ims]
+        # the labels also have the _L suffix before the png extension
+        lb_names = [el.replace('_L.png', '') for el in lbs]
+        common_names = list(set(im_names) & set(lb_names))
+
+        lines = [
+            f'{root_path}{mode}/{name}.png,{root_path}{mode}_labels/{name}_L.png'
+            for name in common_names
+        ]
+
+        with open(f'{save_path}/{mode}.txt', 'w') as fw:
+            fw.write('\n'.join(lines))
+
+
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
@@ -86,3 +122,5 @@ if __name__ == '__main__':
         gen_coco()
     elif args.dataset == 'ade20k':
         gen_ade20k()
+    elif args.dataset == 'camvid':
+        gen_camvid()

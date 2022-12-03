@@ -40,8 +40,10 @@ class BaseDataset(Dataset):
     def __getitem__(self, idx):
         impth, lbpth = self.img_paths[idx], self.lb_paths[idx]
         img, label = self.get_image(impth, lbpth)
-        if not self.lb_map is None:
-            label = self.lb_map[label]
+        # if callable(self.lb_map):
+        #     label = self.lb_map(label)
+        # elif not self.lb_map is None:
+        label = self.lb_map[label]
         im_lb = dict(im=img, lb=label)
         if not self.trans_func is None:
             im_lb = self.trans_func(im_lb)

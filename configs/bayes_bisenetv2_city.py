@@ -2,7 +2,9 @@
 
 ## bisenetv2
 cfg = dict(
-    model_type='bayes_bisenetv2',
+    model_type='bisenetv2',
+    model_config='bayes',
+    momentum=0.9,
     n_cats=19,
     num_aux_heads=4,
     lr_start=1e-3,
@@ -17,7 +19,7 @@ cfg = dict(
     cropsize=[512, 1024],
     eval_crop=[1024, 1024],
     eval_scales=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-    ims_per_gpu=1,
+    ims_per_gpu=4,
     eval_ims_per_gpu=1,
     use_fp16=False,
     use_sync_bn=True,

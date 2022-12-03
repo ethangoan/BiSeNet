@@ -9,9 +9,8 @@ from lib.data.sampler import RepeatedDistSampler
 from lib.data.cityscapes_cv2 import CityScapes
 from lib.data.coco import CocoStuff
 from lib.data.ade20k import ADE20k
+from lib.data.camvid import CamVid
 from lib.data.customer_dataset import CustomerDataset
-
-
 
 
 
@@ -46,7 +45,7 @@ def get_data_loader(cfg, mode='train'):
         dl = DataLoader(
             ds,
             batch_sampler=batchsampler,
-            num_workers=4,
+            num_workers=8,
             pin_memory=True,
         )
     else:
@@ -55,7 +54,7 @@ def get_data_loader(cfg, mode='train'):
             batch_size=batchsize,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=4,
+            num_workers=8,
             pin_memory=True,
         )
     return dl
