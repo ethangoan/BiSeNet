@@ -87,6 +87,7 @@ int main(int argc, char* argv[]) {
 
 
 void compile_onnx(vector<string> args) {
+    cout << "in compile onnx" << endl;
     string quant("fp32");
     string data_root("none");
     string data_file("none");
@@ -105,7 +106,10 @@ void compile_onnx(vector<string> args) {
         }
     } 
 
+    cout << "start parsing" << endl;
     TrtSharedEnginePtr engine = parse_to_engine(args[1], quant, data_root, data_file);
+    cout << "parsed to engine is done" << endl;
+
     serialize(engine, args[2]);
 }
 

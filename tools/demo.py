@@ -10,11 +10,14 @@ from PIL import Image
 import numpy as np
 import cv2
 import scipy
+from os import path as osp
+import os
+import pathlib
 
 import lib.data.transform_cv2 as T
 from lib.models import model_factory
 from configs import set_cfg_from_file
-
+import matplotlib.pyplot as plt
 
 from collections import namedtuple
 
@@ -221,6 +224,10 @@ def colorEncode(labelmap, colors, mode='RGB'):
 colors = scipy.io.loadmat('color150.mat')['colors']
 
 
+def check_mkdir(path):
+    if not osp.isdir(path):
+        pathlib.Path(path).mkdir(parents=True)
+
 # args
 parse = argparse.ArgumentParser()
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2.py',)
@@ -262,54 +269,12 @@ im = F.interpolate(im, size=new_size, align_corners=False, mode='bilinear')
 print(im.shape)
 out_mean = 0.0
 out_entropy = 0.0
-# T = 100
-# print(new_size)
-# for i in range(T):
-#     print(i)
-#     out = net(im)[0]
-#     out = F.interpolate(out, size=org_size, align_corners=False, mode='bilinear')
-#     out = F.softmax(out)
-#     out_mean += out
-#     out_entropy += -(out * torch.log(out)).mean(1)
-#     print(out_entropy.shape)
-
-# out_mean = out_mean / T
-# out_entropy = out_entropy / T
-
-# # visualize
-# out_mean = out_mean.argmax(1).squeeze().detach().cpu().numpy()
-# print(out_mean.shape)
-# out_entropy = out_entropy.squeeze().detach().cpu().numpy()
-# print(out_mean)
-# print(org_size)
-# # pred = palette[out_mean.argmax(1)]
-
-
-# pred_col = colorEncode(out_mean, colors)
-# print(out_entropy)
-# cv2.imwrite('./res.jpg', pred_col)
-# cv2.imwrite('./res_entropy.jpg', out_entropy / np.max(out_entropy))
-
-import matplotlib.pyplot as plt
-# plt.figure()
-# plt.imshow(out_entropy / np.max(out_entropy))
-# plt.savefig('ent.png')
-
-# print(net.head.conv_bayes.rho_kernel)
-
-
-# net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='eval_bayes')
-# net.load_state_dict(torch.load(args.weight_path, map_location='cpu'), strict=False)
-# net.eval()
-# net.cuda()
-
-# print(net)
-# weight_var = torch.load('weight_var.pt')
-# bias_var = torch.load('bias_var.pt')
-# now do a forward pass
 logit_mean, logit_var = net(im)
+logit_mean = logit_mean.double()
+logit_var = logit_var.double()
+
+plt.figure()
 for i in range(19):
-    plt.figure()
     out_var_class = logit_var[0, i, :, :]
     plt.imshow(torch.squeeze(out_var_class / torch.max(out_var_class)).cpu().numpy())
     plt.title(labels[i].name)
@@ -319,67 +284,63 @@ for i in range(19):
     plt.imshow(np.squeeze(out_class))
     plt.title(labels[i].name)
     plt.savefig(f'logit/im_{i}.png')
+    plt.clf()
 
 
-
-
-
-# out_mean, feat_basis = net(im)
-
-# test = F.conv2d(torch.square(feat_basis), weight_var, bias=bias_var)
-# print(test.shape)
-# out_var = F.interpolate(test, size=org_size, align_corners=False, mode='bilinear')
-
-# for i in range(19):
-#     plt.figure()
-#     out_var_class = out_var[0, i, :, :]
-#     plt.imshow(torch.squeeze(out_var_class / torch.max(out_var_class)).cpu().numpy())
-#     plt.title(labels[i].name)
-#     plt.savefig(f'var_{i}.png')
-#     plt.clf()
-#     out_class = F.softmax(out_mean)[0, i, :, :].cpu().numpy()
-#     plt.imshow(np.squeeze(out_class))
-#     plt.title(labels[i].name)
-#     plt.savefig(f'pred/im_{i}.png')
-
-
-out = F.softmax(torch.Tensor(logit_mean))
+out = F.softmax(torch.Tensor(logit_mean)).double()
 out_entropy = -(out * torch.log(out)).mean(1)
 # visualize
 out = out.argmax(1).squeeze().detach().cpu().numpy()
 out_entropy = out_entropy.squeeze().detach().cpu().numpy()
 # pred = palette[out_mean.argmax(1)]
-print(out.shape)
-
 pred_col = colorEncode(out, colors)
-print(out_entropy)
-cv2.imwrite('./res.jpg', pred_col)
-cv2.imwrite('./res_entropy.jpg', out_entropy / np.max(out_entropy))
 
-print(out)
+decision_dir = osp.abspath(osp.join(f'./{cfg.model_type}_figs', cfg.dataset, 'decision'))
+check_mkdir(decision_dir)
+
+
+cv2.imwrite(osp.join(decision_dir, 'pred.jpg' ), pred_col)
+
+plt.imshow(out_entropy / np.max(out_entropy))
+plt.title('entropy')
+plt.savefig(osp.join(decision_dir, f'entropy.png'))
+plt.clf()
+
+
+# cv2.imwrite(osp.join(decision_dir, 'entropy.jpg' ),out_entropy / np.max(out_entropy))
+
 
 # now have a look at the uncertainty propegation stuff
 adf_softmax = ADFSoftmax()
 s_mean, s_var = adf_softmax(logit_mean, logit_var)
 
 for i in range(19):
-    plt.figure()
     s_var_class = s_var[0, i, :, :]
     plt.imshow(torch.squeeze(s_var_class ).cpu().numpy())
     plt.title(labels[i].name)
-    plt.savefig(f'softmax/var_{i}.png')
+    plt.savefig(osp.join(decision_dir, f'var_{i}.png'))
+    plt.clf()
 
+# lets also get the gaussian entropy here
+decision_gaussian_entropy = 0.5 * torch.log((torch.prod(s_var.double(), 1))).squeeze().cpu().numpy()
+plt.imshow(decision_gaussian_entropy)
+plt.title('decision entropy')
+plt.savefig(osp.join(decision_dir, f'gaussian_entropy.png'))
+plt.clf()
 
+logit_dir = osp.abspath(osp.join(f'./{cfg.model_type}_figs', cfg.dataset, 'logit'))
+check_mkdir(logit_dir)
 # now try and compute the entropy in the Gaussian side of things
-gaussian_entropy = 0.5 * torch.log((torch.prod(logit_var.double(), 1))).squeeze().cpu().numpy()
-print(np.max(gaussian_entropy))
-print(np.min(gaussian_entropy))
+logit_entropy = 0.5 * torch.log((torch.prod(logit_var.double(), 1))).squeeze().cpu().numpy()
 plt.figure()
-plt.imshow(gaussian_entropy)
-plt.title('gaussian_entropy')
-plt.savefig(f'gaussian_entropy.png')
+plt.imshow(logit_entropy)
+plt.title('logit entropy')
+plt.savefig(osp.join(logit_dir, f'entropy.png'))
+plt.clf()
 
-plt.figure()
-plt.imshow(out_entropy)
-plt.title('softmax_entropy')
-plt.savefig(f'softmax_entropy.png')
+for i in range(19):
+    logit_var_class = logit_var[0, i, :, :]
+    plt.imshow(torch.squeeze(logit_var_class ).cpu().numpy())
+    plt.title(labels[i].name)
+    plt.savefig(osp.join(logit_dir, f'var_{i}.png'))
+    plt.clf()

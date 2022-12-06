@@ -28,6 +28,14 @@ from lib.data import get_data_loader
 def get_round_size(size, divisor=32):
     return [math.ceil(el / divisor) * divisor for el in size]
 
+def get_logit(model, x):
+    # get the logits. If the model out has a lot of
+    # outputs (ie. is a list), the first one will be the logits
+    out = model(x)
+    if isinstance(out, list):
+        return out[0]
+    else:
+        return out
 
 class SizePreprocessor(object):
 
@@ -158,26 +166,14 @@ class MscEvalV0(object):
                         mode='bilinear', align_corners=True)
 
                 im_sc = im_sc.cuda()
-                model_out = net(im_sc)
-                # get the logits. If the model out has a lot of
-                # outputs (ie. is a list), the first one will be the logits
-                if isinstance(model_out, list):
-                    logits = model_out[0]
-                else:
-                    logits = model_out
+                logits = get_logit(net, im_sc)
 
                 logits = F.interpolate(logits, size=size,
                         mode='bilinear', align_corners=True)
                 probs += torch.softmax(logits, dim=1)
                 if self.flip:
                     im_sc = torch.flip(im_sc, dims=(3, ))
-                    # get the logits. If the model out has a lot of
-                    # outputs (ie. is a list), the first one will be the logits
-                    model_out = net(im_sc)
-                    if isinstance(model_out, list):
-                        logits = model_out[0]
-                    else:
-                        logits = model_out
+                    logits = get_logit(net, im_sc)
                     logits = torch.flip(logits, dims=(3, ))
                     logits = F.interpolate(logits, size=size,
                             mode='bilinear', align_corners=True)
@@ -228,23 +224,11 @@ class MscEvalCrop(object):
 
 
     def eval_chip(self, net, crop):
-        # get the logits. If the model out has a lot of
-        # outputs (ie. is a list), the first one will be the logits
-        model_out = net(crop)
-        if isinstance(model_out, list):
-            logits = model_out[0]
-        else:
-            logits = model_out
+        logits = get_logit(net, crop)
         prob = logits.softmax(dim=1)
         if self.flip:
             crop = torch.flip(crop, dims=(3,))
-            # get the logits. If the model out has a lot of
-            # outputs (ie. is a list), the first one will be the logits
-            model_out = net(crop)
-            if isinstance(model_out, list):
-                logits = model_out[0]
-            else:
-                logits = model_out
+            logits = get_logit(net, crop)
             prob += logits.flip(dims=(3,)).softmax(dim=1)
             prob = torch.exp(prob)
         return prob

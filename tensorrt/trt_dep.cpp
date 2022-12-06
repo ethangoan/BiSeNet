@@ -88,6 +88,7 @@ TrtSharedEnginePtr parse_to_engine(string onnx_pth,
     if ((quant == "fp16" or quant == "int8") && builder->platformHasFastFp16()) {
         config->setFlag(nvinfer1::BuilderFlag::kFP16); // fp16
     }
+
     std::unique_ptr<IInt8Calibrator> calibrator;
     if (quant == "int8" && builder->platformHasFastInt8()) {
         config->setFlag(nvinfer1::BuilderFlag::kINT8); //int8
@@ -105,6 +106,7 @@ TrtSharedEnginePtr parse_to_engine(string onnx_pth,
         config->setInt8Calibrator(calibrator.get());
     }
 
+    cout << "getting network output" << endl;
     auto output = network->getOutput(0);
     // output->setType(nvinfer1::DataType::kINT32);
     output->setType(nvinfer1::DataType::kFLOAT);

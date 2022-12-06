@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
 from bayesian_torch.layers import Conv2dReparameterization, Conv2dFlipout
+from lib.models.adf import ADFSoftmax
 
 backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
-
 
 class ConvBNReLU(nn.Module):
 
@@ -376,6 +376,7 @@ class BiSeNetV2(nn.Module):
         self.segment = SegmentBranch()
         self.bga = BGALayer()
         self.bayes = ('bayes' in aux_mode)
+        self.softmax_adf = ADFSoftmax()
 
         ## TODO: what is the number of mid chan ?
         self.head = SegmentHead(128, 1024, n_classes,
@@ -394,7 +395,7 @@ class BiSeNetV2(nn.Module):
         feat2, feat3, feat4, feat5_4, feat_s = self.segment(x)
         feat_head = self.bga(feat_d, feat_s)
 
-        logits, logit_var = self.head(feat_head, return_var=self.bayes)
+        logits, logits_var = self.head(feat_head, return_var=self.bayes)
         if self.aux_mode == 'train':
             logits_aux2 = self.aux2(feat2)
             logits_aux3 = self.aux3(feat3)
@@ -402,9 +403,13 @@ class BiSeNetV2(nn.Module):
             logits_aux5_4 = self.aux5_4(feat5_4)
             return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
-            return logits,
+            return logits
         elif self.aux_mode == 'eval_bayes':
-            return logits, logit_var
+            return logits, logits_var
+        elif self.aux_mode == 'eval_bayes_prob':
+            # pass through the softmax
+            prob_mean, prob_var = self.softmax_adf(logits, logits_var)
+            return prob_mean, prob_var
         elif self.aux_mode == 'pred':
             pred = logits.argmax(dim=1)
             return pred
