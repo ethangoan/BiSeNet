@@ -256,7 +256,7 @@ void test_fps_with_engine(TrtSharedEnginePtr engine) {
     Dims3 in_dims = static_cast<Dims3&&>(
         engine->getBindingDimensions(engine->getBindingIndex("input_image")));
     Dims3 out_dims = static_cast<Dims3&&>(
-        engine->getBindingDimensions(engine->getBindingIndex("preds")));
+        engine->getBindingDimensions(engine->getBindingIndex("logits")));
 
     const int batchsize{1};
     const int oH{out_dims.d[2]}, oW{out_dims.d[3]};
@@ -296,7 +296,7 @@ void test_fps_with_engine(TrtSharedEnginePtr engine) {
     for (int i{0}; i < n_loops; ++i) {
         // context->execute(1, &buffs[0]);
         context->executeV2(&buffs[0]);
-        argMaxFunc(buffs[1], buffs[2], batchsize, n_classes, oH * oW, nullptr);
+        // argMaxFunc(buffs[1], buffs[2], batchsize, n_classes, oH * oW, nullptr);
     }
     auto end = std::chrono::steady_clock::now();
     double duration = std::chrono::duration<double, std::milli>(end - start).count();
@@ -310,4 +310,3 @@ void test_fps_with_engine(TrtSharedEnginePtr engine) {
     cudaFree(buffs[1]);
     cudaFree(buffs[2]);
 }
-
