@@ -284,7 +284,7 @@ class BGALayer(nn.Module):
 
 class SegmentHead(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True, bayes=False):
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True, bayes=False, prob=False):
         super(SegmentHead, self).__init__()
         self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
         self.drop = nn.Dropout(0.1) if aux else nn.Identity()
@@ -300,21 +300,36 @@ class SegmentHead(nn.Module):
             ) if aux else nn.Identity()
         self.conv_out = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
         self.upsample = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
+        # if we are being bayesian for this layer we will want to set the variance operator
         self.conv_var = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True) if bayes else nn.Identity()
+        # if we are being bayesian and want to return a categorical probability, we should set the
+        # output here to be an ADF Softmax operator
+        self.prob = prob
+        self.adf_softmax = ADFSoftmax() if prob else nn.Identity()
 
     def forward(self, x, return_var=False):
         feat = self.conv(x)
         feat_basis = self.conv_pre(feat)
         feat = self.drop(feat_basis)
         feat = self.conv_out(feat)
-        logits = self.upsample(feat)
-        if return_var:
-            var = self.upsample(self.conv_var(feat_basis ** 2.0))
-            return logits, var
-        elif self.aux:
+        if self.aux:
             # if is  an aux layer, need to return just the logit
-            return logits
+            aux_out = self.upsample(feat)
+            return aux_out
+        # otherwise we aren't in an auxilliary layer, and we are on the output of the model
+        # and either want to return the output logit, or the output probability
+        elif return_var:
+            var = self.conv_var(feat_basis ** 2.0)
+            # if we specified that we want to get a categorical probability out of this layer,
+            # than we need to apply the adf softmax.
+            if self.prob:
+                feat, var = self.adf_softmax(feat, var)
+            mean = self.upsample(feat)
+            var = self.upsample(var)
+            return mean, var
         else:
+            # otherwise just return the logit and a None value for the variance
+            logits = self.upsample(feat)
             return logits, None
 
 
@@ -378,10 +393,11 @@ class BiSeNetV2(nn.Module):
         self.bayes = ('bayes' in aux_mode)
         self.softmax_adf = ADFSoftmax()
 
+
         ## TODO: what is the number of mid chan ?
         self.head = SegmentHead(128, 1024, n_classes,
                                 up_factor=8, aux=False,
-                                bayes=self.bayes)
+                                bayes=self.bayes, prob=True)
         if self.aux_mode == 'train':
             self.aux2 = SegmentHead(16, 128, n_classes, up_factor=4)
             self.aux3 = SegmentHead(32, 128, n_classes, up_factor=8)
@@ -395,7 +411,7 @@ class BiSeNetV2(nn.Module):
         feat2, feat3, feat4, feat5_4, feat_s = self.segment(x)
         feat_head = self.bga(feat_d, feat_s)
 
-        logits, logits_var = self.head(feat_head, return_var=self.bayes)
+        out_mean, out_var = self.head(feat_head, return_var=self.bayes)
         if self.aux_mode == 'train':
             logits_aux2 = self.aux2(feat2)
             logits_aux3 = self.aux3(feat3)
@@ -403,15 +419,16 @@ class BiSeNetV2(nn.Module):
             logits_aux5_4 = self.aux5_4(feat5_4)
             return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
-            return logits
+            return out_mean
         elif self.aux_mode == 'eval_bayes':
-            return logits, logits_var
+            return out_mean, out_var
         elif self.aux_mode == 'eval_bayes_prob':
+            return out_mean, out_var
             # pass through the softmax
-            prob_mean, prob_var = self.softmax_adf(logits, logits_var)
-            return prob_mean, prob_var
+            # prob_mean, prob_var = self.softmax_adf(out_mean, out_var)
+            # return prob_mean, prob_var
         elif self.aux_mode == 'pred':
-            pred = logits.argmax(dim=1)
+            pred = out_mean.argmax(dim=1)
             return pred
         else:
             raise NotImplementedError
