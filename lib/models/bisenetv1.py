@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
+
+from lib.models.adf import ADFSoftmax
 from .resnet import Resnet18
 
 from torch.nn import BatchNorm2d
@@ -71,7 +73,7 @@ class BiSeNetOutput(nn.Module):
         self.conv_out = nn.Conv2d(mid_chan, out_chan, kernel_size=1, bias=True)
         self.up = nn.Upsample(scale_factor=up_factor,
                 mode='bilinear', align_corners=False)
-        self.conv_var = nn.Conv2d(mid_chan2, out_chan, kernel_size=1, bias=True) if self.bayes else nn.Identity()
+        self.conv_var = nn.Conv2d(mid_chan, out_chan, kernel_size=1, bias=True) if self.bayes else nn.Identity()
         # if we are being bayesian and want to return a categorical probability, we should set the
         # output here to be an ADF Softmax operator
         self.adf_softmax = ADFSoftmax() if self.prob else nn.Identity()
@@ -287,10 +289,14 @@ class BiSeNetV1(nn.Module):
 
     def __init__(self, n_classes, aux_mode='train', *args, **kwargs):
         super(BiSeNetV1, self).__init__()
+        self.bayes = ('bayes' in aux_mode)
+        self.apply_adf_softmax = (aux_mode == 'eval_bayes_prob')
         self.cp = ContextPath()
         self.sp = SpatialPath()
         self.ffm = FeatureFusionModule(256, 256)
-        self.conv_out = BiSeNetOutput(256, 256, n_classes, up_factor=8)
+        self.conv_out = BiSeNetOutput(256, 256, n_classes, up_factor=8,
+                                      bayes=self.bayes,
+                                      prob=self.apply_adf_softmax)
         self.aux_mode = aux_mode
         if self.aux_mode == 'train':
             self.conv_out16 = BiSeNetOutput(128, 64, n_classes, up_factor=8)

@@ -114,6 +114,8 @@ def set_model(lb_ignore=255):
   if not args.finetune_from is None:
     logger.info(f'load pretrained weights from {args.finetune_from}')
     loaded_state = torch.load(args.finetune_from, map_location='cpu')
+    for key in loaded_state.keys():
+      print(key)
     loaded_state = format_state_params(loaded_state, cfg.model_type)
     net.load_state_dict(loaded_state, strict=False)
   if cfg.use_sync_bn:
@@ -265,6 +267,12 @@ def initialise_var_params(net):
     weight_squared_sum = torch.zeros(
         net.module.head.conv_out.weight.shape).cuda()
     bias_squared_sum = torch.zeros(net.module.head.conv_out.bias.shape).cuda()
+  if 'bisenetv1' in cfg.model_type:
+    weight_sum = torch.zeros(net.module.conv_out.conv_out.weight.shape).cuda()
+    bias_sum = torch.zeros(net.module.conv_out.conv_out.bias.shape).cuda()
+    weight_squared_sum = torch.zeros(
+        net.module.conv_out.conv_out.weight.shape).cuda()
+    bias_squared_sum = torch.zeros(net.module.conv_out.conv_out.bias.shape).cuda()
   elif 'pidnet' in cfg.model_type:
     weight_sum = torch.zeros(net.module.final_layer.conv2.weight.shape).cuda()
     bias_sum = torch.zeros(net.module.final_layer.conv2.bias.shape).cuda()
@@ -290,6 +298,12 @@ def update_var_params(net, weight_sum, bias_sum, weight_squared_sum,
     bias_sum += net.module.head.conv_out.bias
     weight_squared_sum += torch.square(net.module.head.conv_out.weight)
     bias_squared_sum += torch.square(net.module.head.conv_out.bias)
+  elif 'bisenetv1' in cfg.model_type:
+    # now update our sum parameters for the  weight and bias terms
+    weight_sum += net.module.conv_out.conv_out.weight
+    bias_sum += net.module.conv_out.conv_out.bias
+    weight_squared_sum += torch.square(net.module.conv_out.conv_out.weight)
+    bias_squared_sum += torch.square(net.module.conv_out.conv_out.bias)
   elif 'pidnet' in cfg.model_type:
     weight_sum += net.module.final_layer.conv2.weight
     bias_sum += net.module.final_layer.conv2.bias
@@ -311,8 +325,10 @@ def set_trainable_params(net):
       if name not in [
           'module.final_layer.conv2.weight',  # pidnet
           'module.final_layer.conv2.bias',
-          'module.head.conv_out.weight',  # bisenet
+          'module.head.conv_out.weight',  # bisenetv2
           'module.head.conv_out.bias'
+          'module.conv_out.conv_out.weight',  # bisenetv1
+          'module.conv_out.conv_out.bias'
       ]:
         param.requires_grad = False
 
@@ -347,6 +363,17 @@ def get_lr_scheduler(optim):
   return optim, lr_schdr
 
 
+def init_mean(net, cfg):
+  if cfg.model_type == 'bisenetv2':
+    w_mean = net.module.head.conv_out.weight.data
+    b_mean = net.module.head.conv_out.bias.data
+  else:
+    w_mean = net.module.conv_out.conv_out.weight.data
+    b_mean = net.module.conv_out.conv_out.bias.data
+  return w_mean, b_mean
+
+
+
 def train():
   logger = logging.getLogger()
   ## dataset
@@ -354,6 +381,7 @@ def train():
   ## model
   net, criteria_pre, criteria_aux = set_model(dl.dataset.lb_ignore)
   ## ddp training
+  print(net)
   net = net.cuda()
   net = set_model_dist(net)
   set_trainable_params(net)
@@ -369,8 +397,8 @@ def train():
   # initialising the variance tracking parameters
   (weight_sum, bias_sum, weight_squared_sum, bias_squared_sum,
    step_count) = initialise_var_params(net)
-  w_mean = net.module.head.conv_out.weight.data
-  b_mean = net.module.head.conv_out.bias.data
+
+  w_mean, b_mean = init_mean(net, cfg)
 
   for param in net.parameters():
     if torch.isnan(param).any():
@@ -490,14 +518,14 @@ def train():
   net.module.head.conv_out.weight.data = w_mean
   net.module.head.conv_out.bias.data = b_mean
   # net.module.head.conv_out.weight.data =  weight_mean
-  # logger.info('\nevaluating the final model')
-  # torch.cuda.empty_cache()
-  # iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
-  # logger.info('\neval results of f1 score metric:')
-  # logger.info('\n' + tabulate(f1_content, headers=f1_heads, tablefmt='orgtbl'))
-  # logger.info('\neval results of miou metric:')
-  # logger.info('\n' +
-  #             tabulate(iou_content, headers=iou_heads, tablefmt='orgtbl'))
+  logger.info('\nevaluating the final model')
+  torch.cuda.empty_cache()
+  iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
+  logger.info('\neval results of f1 score metric:')
+  logger.info('\n' + tabulate(f1_content, headers=f1_heads, tablefmt='orgtbl'))
+  logger.info('\neval results of miou metric:')
+  logger.info('\n' +
+              tabulate(iou_content, headers=iou_heads, tablefmt='orgtbl'))
 
   return
 
