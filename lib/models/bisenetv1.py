@@ -59,21 +59,42 @@ class UpSample(nn.Module):
 
 class BiSeNetOutput(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=32, *args, **kwargs):
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=32,
+                 bayes=False, prob=False,
+                 *args, **kwargs):
         super(BiSeNetOutput, self).__init__()
         self.up_factor = up_factor
+        self.bayes = bayes
+        self.prob = prob
         out_chan = n_classes
         self.conv = ConvBNReLU(in_chan, mid_chan, ks=3, stride=1, padding=1)
         self.conv_out = nn.Conv2d(mid_chan, out_chan, kernel_size=1, bias=True)
         self.up = nn.Upsample(scale_factor=up_factor,
                 mode='bilinear', align_corners=False)
+        self.conv_var = nn.Conv2d(mid_chan2, out_chan, kernel_size=1, bias=True) if self.bayes else nn.Identity()
+        # if we are being bayesian and want to return a categorical probability, we should set the
+        # output here to be an ADF Softmax operator
+        self.adf_softmax = ADFSoftmax() if self.prob else nn.Identity()
         self.init_weight()
 
-    def forward(self, x):
+    def forward(self, x, return_var=False):
         x = self.conv(x)
-        x = self.conv_out(x)
-        x = self.up(x)
-        return x
+        feat = self.conv_out(x)
+        if not return_var:
+            # upsample x and return it
+            feat = self.up(feat)
+            # return None for the variance as it will be ignored anyway
+            return feat, None
+        else:
+            var = self.conv_var(feat ** 2.0)
+            # if we specified that we want to get a categorical probability out of this layer,
+            # than we need to apply the adf softmax.
+            if self.prob:
+                feat, var = self.adf_softmax(feat, var)
+            mean = self.upsample(feat)
+            var = self.upsample(var)
+            return mean, var
+
 
     def init_weight(self):
         for ly in self.children():
@@ -282,16 +303,21 @@ class BiSeNetV1(nn.Module):
         feat_sp = self.sp(x)
         feat_fuse = self.ffm(feat_sp, feat_cp8)
 
-        feat_out = self.conv_out(feat_fuse)
+        feat_out, var_out = self.conv_out(feat_fuse)
         if self.aux_mode == 'train':
             feat_out16 = self.conv_out16(feat_cp8)
             feat_out32 = self.conv_out32(feat_cp16)
             return feat_out, feat_out16, feat_out32
         elif self.aux_mode == 'eval':
-            return feat_out,
+            return feat_out
         elif self.aux_mode == 'pred':
             feat_out = feat_out.argmax(dim=1)
             return feat_out
+        elif self.aux_mode == 'eval_bayes':
+            return feat_out, var_out
+        elif self.aux_mode == 'eval_bayes_prob':
+            # pass through the adf softmax is done in the output head
+            return feat_out, var_out
         else:
             raise NotImplementedError
 

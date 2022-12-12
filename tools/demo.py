@@ -16,6 +16,7 @@ import pathlib
 
 import lib.data.transform_cv2 as T
 from lib.models import model_factory
+from lib.models.adf import ADFSoftmax
 from configs import set_cfg_from_file
 import matplotlib.pyplot as plt
 
@@ -231,7 +232,7 @@ im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
 
 # shape divisor
 org_size = im.size()[2:]
-new_size = [math.ceil(el / 64) * 32 for el in im.size()[2:]]
+new_size = [math.ceil(el / 32) * 32 for el in im.size()[2:]]
 print('new size', new_size)
 
 # inference
@@ -250,14 +251,14 @@ for i in range(19):
     plt.title(labels[i].name)
     plt.savefig(f'var_{i}.png')
     plt.clf()
-    out_class = F.softmax(logit_mean)[0, i, :, :].cpu().numpy()
+    out_class = F.softmax(logit_mean, dim=1)[0, i, :, :].cpu().numpy()
     plt.imshow(np.squeeze(out_class))
     plt.title(labels[i].name)
     plt.savefig(f'logit/im_{i}.png')
     plt.clf()
 
 
-out = F.softmax(torch.Tensor(logit_mean)).double()
+out = F.softmax(torch.Tensor(logit_mean), dim=1).double()
 out_entropy = -(out * torch.log(out)).mean(1)
 # visualize
 out = out.argmax(1).squeeze().detach().cpu().numpy()
@@ -272,10 +273,11 @@ check_mkdir(decision_dir)
 cv2.imwrite(osp.join(decision_dir, 'pred.jpg' ), pred_col)
 
 plt.imshow(out_entropy / np.max(out_entropy))
-plt.title('entropy')
-plt.savefig(osp.join(decision_dir, f'entropy.png'))
+# plt.title('entropy')
+ax = plt.gca()
+ax.set_axis_off()
+plt.savefig(osp.join(decision_dir, f'entropy.png'),bbox_inches='tight', pad_inches=0)
 plt.clf()
-
 
 # cv2.imwrite(osp.join(decision_dir, 'entropy.jpg' ),out_entropy / np.max(out_entropy))
 
@@ -294,8 +296,10 @@ for i in range(19):
 # lets also get the gaussian entropy here
 decision_gaussian_entropy = 0.5 * torch.log((torch.prod(s_var.double(), 1))).squeeze().cpu().numpy()
 plt.imshow(decision_gaussian_entropy)
-plt.title('decision entropy')
-plt.savefig(osp.join(decision_dir, f'gaussian_entropy.png'))
+ax = plt.gca()
+ax.set_axis_off()
+# plt.title('decision entropy')
+plt.savefig(osp.join(decision_dir, f'gaussian_entropy.png'), bbox_inches='tight', pad_inches=0)
 plt.clf()
 
 logit_dir = osp.abspath(osp.join(f'./{cfg.model_type}_figs', cfg.dataset, 'logit'))

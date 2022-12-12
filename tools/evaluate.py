@@ -32,7 +32,7 @@ def get_logit(model, x):
     # get the logits. If the model out has a lot of
     # outputs (ie. is a list), the first one will be the logits
     out = model(x)
-    if isinstance(out, list):
+    if (isinstance(out, list) or isinstance(out, tuple)):
         return out[0]
     else:
         return out
@@ -80,10 +80,15 @@ class Metrics(object):
     def update(self, preds, label):
         keep = label != self.lb_ignore
         preds, label = preds[keep], label[keep]
-        self.confusion += torch.bincount(
-                label * self.n_classes + preds,
-                minlength=self.n_classes ** 2
-                ).view(self.n_classes, self.n_classes)
+        try:
+            self.confusion += torch.bincount(
+                    label * self.n_classes + preds,
+                    minlength=self.n_classes ** 2
+                    ).view(self.n_classes, self.n_classes)
+        except RuntimeError as e:
+            print('WARNING: found invalid shape in eval')
+            print('preds.shape', preds.shape)
+            print('label.shape,', label.shape)
 
     @torch.no_grad()
     def compute_metrics(self,):
@@ -313,7 +318,7 @@ def print_res_table(tname, heads, weights, metric, cat_metric):
 @torch.no_grad()
 def eval_model(cfg, net):
     org_aux = net.aux_mode
-    net.aux_mode = 'eval'
+    net.aux_mode = 'eval'#_bayes_prob'
     net.eval()
 
     is_dist = dist.is_initialized()

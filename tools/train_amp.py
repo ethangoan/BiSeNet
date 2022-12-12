@@ -124,6 +124,7 @@ def set_model(lb_ignore=255):
   criteria_pre = OhemCELoss(0.7, lb_ignore)
   # criteria_pre = CrossEntropyLoss2d(ignore_index=lb_ignore, reduction='mean')
   criteria_aux = [OhemCELoss(0.7, lb_ignore) for _ in range(cfg.num_aux_heads)]
+  net.aux_mode = 'eval'
   return net, criteria_pre, criteria_aux
 
 
@@ -369,14 +370,14 @@ def train():
   # initialising the variance tracking parameters
   (weight_sum, bias_sum, weight_squared_sum, bias_squared_sum,
    step_count) = initialise_var_params(net)
+  w_mean = net.module.head.conv_out.weight.data
+  b_mean = net.module.head.conv_out.bias.data
+
   for param in net.parameters():
     if torch.isnan(param).any():
       print('found nan in param', param)
-      time.sleep(2)
   for name, param in net.named_parameters():
     print(name)
-  time.sleep(10)
-
   # for submodule in net.modules():
   #     submodule.register_forward_hook(nan_hook)
   # submodule.register_full_backward_hook(nan_hook)
@@ -386,16 +387,15 @@ def train():
     lb = lb.cuda()
     lb = torch.squeeze(lb, 1)
     optim.zero_grad()
-
     # train with mixed precision if needed
     with amp.autocast(enabled=cfg.use_fp16, dtype=torch.float16):
-      if 'pidnet' in cfg.model_type:
+      if ('pidnet' in cfg.model_type) or (net.module.aux_mode == 'eval'):
         logits = net(im)
         loss_pre = criteria_pre(logits, lb)
         # loss aux is set just as a dummy varible
         # it isn't actually tracking anything important
         # or tracking anything really
-        loss_aux = [crit(0, 0) for crit in criteria_aux]
+        loss_aux = None#[crit(0, 0) for crit in criteria_aux]
         # TODO include number of gpus here
         loss = loss_pre
         # kl_item = kl.item()
@@ -437,7 +437,7 @@ def train():
     # If we are normally training the BiSeNet models, will want to log
     # the auxilliary losses, but if is just fine tuning for the bayesin model than
     # we don't.
-    if ('bisenet' in cfg.model_type):  # and not ('bayes' in cfg.model_type):
+    if loss_aux is not None:#('bisenet' in cfg.model_type):  # and not ('bayes' in cfg.model_type):
       _ = [
           mter.update(lss.item())
           for mter, lss in zip(loss_aux_meters, loss_aux)
@@ -474,7 +474,7 @@ def train():
     print('weight_var = ', weight_var)
     print('bias_var = ', bias_var)
     bayes_state = add_mean_var_to_state(cfg.model_type, net.module.state_dict(),
-                                        weight_mean, bias_mean, weight_var,
+                                        w_mean, b_mean, weight_var,
                                         bias_var)
     # now save the bayes state
     bayes_save_pth = osp.join(cfg.respth,
@@ -488,6 +488,10 @@ def train():
   state = net.module.state_dict()
   if dist.get_rank() == 0:
     torch.save(state, save_pth)
+
+  net.module.head.conv_out.weight.data = w_mean
+  net.module.head.conv_out.bias.data = b_mean
+
 
   # net.module.head.conv_out.weight.data =  weight_mean
   logger.info('\nevaluating the final model')

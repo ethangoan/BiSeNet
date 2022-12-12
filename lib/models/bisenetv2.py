@@ -284,7 +284,8 @@ class BGALayer(nn.Module):
 
 class SegmentHead(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True, bayes=False, prob=False):
+    def __init__(self, in_chan, mid_chan, n_classes,
+                 up_factor=8, aux=True, bayes=False, prob=False):
         super(SegmentHead, self).__init__()
         self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
         self.drop = nn.Dropout(0.1) if aux else nn.Identity()
@@ -397,7 +398,7 @@ class BiSeNetV2(nn.Module):
         ## TODO: what is the number of mid chan ?
         self.head = SegmentHead(128, 1024, n_classes,
                                 up_factor=8, aux=False,
-                                bayes=self.bayes, prob=True)
+                                bayes=self.bayes, prob=False)
         if self.aux_mode == 'train':
             self.aux2 = SegmentHead(16, 128, n_classes, up_factor=4)
             self.aux3 = SegmentHead(32, 128, n_classes, up_factor=8)
@@ -417,7 +418,7 @@ class BiSeNetV2(nn.Module):
             logits_aux3 = self.aux3(feat3)
             logits_aux4 = self.aux4(feat4)
             logits_aux5_4 = self.aux5_4(feat5_4)
-            return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
+            return out_mean, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
             return out_mean
         elif self.aux_mode == 'eval_bayes':

@@ -13,7 +13,7 @@ def gen_coco():
                 |- train2017
                 |- val2017
     '''
-    root_path = './datasets/coco'
+    root_path = '/home/ethan/exp_data/coco'
     save_path = './datasets/coco/'
     for mode in ('train', 'val'):
         im_root = osp.join(root_path, f'images/{mode}2017')
@@ -48,7 +48,7 @@ def gen_ade20k():
                 |- training
                 |- validation
     '''
-    root_path = './datasets/ade20k/'
+    root_path = '/home/ethan/exp_data/ade20k/'
     save_path = './datasets/ade20k/'
     folder_map = {'train': 'training', 'val': 'validation'}
     for mode in ('train', 'val'):
