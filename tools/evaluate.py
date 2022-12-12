@@ -352,60 +352,60 @@ def eval_model(cfg, net):
     macro_f1.append(metrics['macro_f1'])
     micro_f1.append(metrics['micro_f1'])
 
-    single_crop = MscEvalCrop(
-            n_classes=cfg.n_cats,
-            cropsize=cfg.eval_crop,
-            cropstride=2. / 3,
-            flip=False,
-            scales=(1., ),
-            lb_ignore=lb_ignore,
-            size_processor=size_processor
-    )
-    logger.info('compute single scale crop metrics')
-    metrics = single_crop(net, dl)
-    heads.append('ssc')
-    mious.append(metrics['miou'])
-    fw_mious.append(metrics['fw_miou'])
-    cat_ious.append(metrics['ious'])
-    f1_scores.append(metrics['f1_scores'])
-    macro_f1.append(metrics['macro_f1'])
-    micro_f1.append(metrics['micro_f1'])
+    # single_crop = MscEvalCrop(
+    #         n_classes=cfg.n_cats,
+    #         cropsize=cfg.eval_crop,
+    #         cropstride=2. / 3,
+    #         flip=False,
+    #         scales=(1., ),
+    #         lb_ignore=lb_ignore,
+    #         size_processor=size_processor
+    # )
+    # logger.info('compute single scale crop metrics')
+    # metrics = single_crop(net, dl)
+    # heads.append('ssc')
+    # mious.append(metrics['miou'])
+    # fw_mious.append(metrics['fw_miou'])
+    # cat_ious.append(metrics['ious'])
+    # f1_scores.append(metrics['f1_scores'])
+    # macro_f1.append(metrics['macro_f1'])
+    # micro_f1.append(metrics['micro_f1'])
 
-    ms_flip = MscEvalV0(
-            n_classes=cfg.n_cats,
-            scales=cfg.eval_scales,
-            flip=True,
-            lb_ignore=lb_ignore,
-            size_processor=size_processor
-    )
-    logger.info('compute multi scale flip metrics')
-    metrics = ms_flip(net, dl)
-    heads.append('msf')
-    mious.append(metrics['miou'])
-    fw_mious.append(metrics['fw_miou'])
-    cat_ious.append(metrics['ious'])
-    f1_scores.append(metrics['f1_scores'])
-    macro_f1.append(metrics['macro_f1'])
-    micro_f1.append(metrics['micro_f1'])
+    # ms_flip = MscEvalV0(
+    #         n_classes=cfg.n_cats,
+    #         scales=cfg.eval_scales,
+    #         flip=True,
+    #         lb_ignore=lb_ignore,
+    #         size_processor=size_processor
+    # )
+    # logger.info('compute multi scale flip metrics')
+    # metrics = ms_flip(net, dl)
+    # heads.append('msf')
+    # mious.append(metrics['miou'])
+    # fw_mious.append(metrics['fw_miou'])
+    # cat_ious.append(metrics['ious'])
+    # f1_scores.append(metrics['f1_scores'])
+    # macro_f1.append(metrics['macro_f1'])
+    # micro_f1.append(metrics['micro_f1'])
 
-    ms_flip_crop = MscEvalCrop(
-            n_classes=cfg.n_cats,
-            cropsize=cfg.eval_crop,
-            cropstride=2. / 3,
-            flip=True,
-            scales=cfg.eval_scales,
-            lb_ignore=lb_ignore,
-            size_processor=size_processor
-    )
-    logger.info('compute multi scale flip crop metrics')
-    metrics = ms_flip_crop(net, dl)
-    heads.append('msfc')
-    mious.append(metrics['miou'])
-    fw_mious.append(metrics['fw_miou'])
-    cat_ious.append(metrics['ious'])
-    f1_scores.append(metrics['f1_scores'])
-    macro_f1.append(metrics['macro_f1'])
-    micro_f1.append(metrics['micro_f1'])
+    # ms_flip_crop = MscEvalCrop(
+    #         n_classes=cfg.n_cats,
+    #         cropsize=cfg.eval_crop,
+    #         cropstride=2. / 3,
+    #         flip=True,
+    #         scales=cfg.eval_scales,
+    #         lb_ignore=lb_ignore,
+    #         size_processor=size_processor
+    # )
+    # logger.info('compute multi scale flip crop metrics')
+    # metrics = ms_flip_crop(net, dl)
+    # heads.append('msfc')
+    # mious.append(metrics['miou'])
+    # fw_mious.append(metrics['fw_miou'])
+    # cat_ious.append(metrics['ious'])
+    # f1_scores.append(metrics['f1_scores'])
+    # macro_f1.append(metrics['macro_f1'])
+    # micro_f1.append(metrics['micro_f1'])
 
     weights = metrics['weights']
 
@@ -425,7 +425,7 @@ def evaluate(cfg, weight_pth):
 
     ## model
     logger.info('setup and restore model')
-    net = model_factory[cfg.model_type](cfg.n_cats)
+    net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='eval_bayes_prob')
     net.load_state_dict(torch.load(weight_pth, map_location='cpu'))
     net.cuda()
 

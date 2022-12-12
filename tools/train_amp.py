@@ -110,13 +110,12 @@ class CrossEntropyLoss2d(nn.Module):
 
 def set_model(lb_ignore=255):
   logger = logging.getLogger()
-  net = model_factory[cfg.model_type](cfg.n_cats)
+  net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='eval')
   if not args.finetune_from is None:
     logger.info(f'load pretrained weights from {args.finetune_from}')
     loaded_state = torch.load(args.finetune_from, map_location='cpu')
     loaded_state = format_state_params(loaded_state, cfg.model_type)
-
-    net.load_state_dict(loaded_state)
+    net.load_state_dict(loaded_state, strict=False)
   if cfg.use_sync_bn:
     net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
   net.cuda()
@@ -425,7 +424,6 @@ def train():
     if (it >= cfg.warmup_iters) and ('bayes' in cfg.model_config) and (
         (it + 1) % cfg.var_step == 0):
       # now update our sum parameters for the  weight and bias terms
-      print('here')
       (weight_sum, bias_sum, weight_squared_sum, bias_squared_sum,
        step_count) = update_var_params(net, weight_sum, bias_sum,
                                        weight_squared_sum, bias_squared_sum,
@@ -478,30 +476,28 @@ def train():
                                         bias_var)
     # now save the bayes state
     bayes_save_pth = osp.join(cfg.respth,
-                              f'{cfg.model_type}_bayes_model_final.pth')
+                              f'{cfg.model_type}_{cfg.dataset}_bayes_model_final.pth')
     if dist.get_rank() == 0:
       torch.save(bayes_state, bayes_save_pth)
 
   ## dump the final model and evaluate the result
-  save_pth = osp.join(cfg.respth, f'{cfg.model_type}_model_final.pth')
-  logger.info('\nsave models to {}'.format(save_pth))
-  state = net.module.state_dict()
-  if dist.get_rank() == 0:
-    torch.save(state, save_pth)
+  # save_pth = osp.join(cfg.respth, f'{cfg.model_type}_{cfg.dataset}_model_final.pth')
+  # logger.info('\nsave models to {}'.format(save_pth))
+  # state = net.module.state_dict()
+  # if dist.get_rank() == 0:
+  #   torch.save(state, save_pth)
 
   net.module.head.conv_out.weight.data = w_mean
   net.module.head.conv_out.bias.data = b_mean
-
-
   # net.module.head.conv_out.weight.data =  weight_mean
-  logger.info('\nevaluating the final model')
-  torch.cuda.empty_cache()
-  iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
-  logger.info('\neval results of f1 score metric:')
-  logger.info('\n' + tabulate(f1_content, headers=f1_heads, tablefmt='orgtbl'))
-  logger.info('\neval results of miou metric:')
-  logger.info('\n' +
-              tabulate(iou_content, headers=iou_heads, tablefmt='orgtbl'))
+  # logger.info('\nevaluating the final model')
+  # torch.cuda.empty_cache()
+  # iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
+  # logger.info('\neval results of f1 score metric:')
+  # logger.info('\n' + tabulate(f1_content, headers=f1_heads, tablefmt='orgtbl'))
+  # logger.info('\neval results of miou metric:')
+  # logger.info('\n' +
+  #             tabulate(iou_content, headers=iou_heads, tablefmt='orgtbl'))
 
   return
 

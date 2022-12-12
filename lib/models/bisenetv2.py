@@ -392,13 +392,12 @@ class BiSeNetV2(nn.Module):
         self.segment = SegmentBranch()
         self.bga = BGALayer()
         self.bayes = ('bayes' in aux_mode)
-        self.softmax_adf = ADFSoftmax()
-
+        self.apply_adf_softmax = (aux_mode == 'eval_bayes_prob')
 
         ## TODO: what is the number of mid chan ?
         self.head = SegmentHead(128, 1024, n_classes,
                                 up_factor=8, aux=False,
-                                bayes=self.bayes, prob=False)
+                                bayes=self.bayes, prob=self.apply_adf_softmax)
         if self.aux_mode == 'train':
             self.aux2 = SegmentHead(16, 128, n_classes, up_factor=4)
             self.aux3 = SegmentHead(32, 128, n_classes, up_factor=8)

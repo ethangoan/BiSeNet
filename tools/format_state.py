@@ -40,10 +40,10 @@ def add_mean_var_pidnet(state, weight_mean, bias_mean,
 
 def add_var_bisenetv2(state, weight_mean, bias_mean,
                       weight_var, bias_var):
-    state['module.head.conv_out.weight'] = weight_mean
-    state['module.head.conv_out.bias'] = bias_mean
-    state['module.head.conv_var.bias'] = weight_var
-    state['module.head.conv_var.bias'] = bias_var
+    state['head.conv_out.weight'] = weight_mean
+    state['head.conv_out.bias'] = bias_mean
+    state['head.conv_var.weight'] = weight_var
+    state['head.conv_var.bias'] = bias_var
     return state
 
 
