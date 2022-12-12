@@ -420,12 +420,12 @@ def eval_model(cfg, net):
     return iou_heads, iou_content, f1_heads, f1_content
 
 
-def evaluate(cfg, weight_pth):
+def evaluate(cfg, weight_pth, mode):
     logger = logging.getLogger()
 
     ## model
     logger.info('setup and restore model')
-    net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='eval_bayes_prob')
+    net = model_factory[cfg.model_type](cfg.n_cats, aux_mode=mode)
     net.load_state_dict(torch.load(weight_pth, map_location='cpu'))
     net.cuda()
 
@@ -451,6 +451,8 @@ def parse_args():
                        default='model_final.pth',)
     parse.add_argument('--config', dest='config', type=str,
             default='configs/bisenetv2.py',)
+    parse.add_argument('--mode', dest='mode', type=str,
+            default='eval',)
     return parse.parse_args()
 
 
@@ -463,7 +465,7 @@ def main():
         dist.init_process_group(backend='nccl')
     if not osp.exists(cfg.respth): os.makedirs(cfg.respth)
     setup_logger(f'{cfg.model_type}-{cfg.dataset.lower()}-eval', cfg.respth)
-    evaluate(cfg, args.weight_pth)
+    evaluate(cfg, args.weight_pth, args.mode)
 
 
 if __name__ == "__main__":
