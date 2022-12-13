@@ -309,7 +309,7 @@ class BiSeNetV1(nn.Module):
         feat_sp = self.sp(x)
         feat_fuse = self.ffm(feat_sp, feat_cp8)
 
-        feat_out, var_out = self.conv_out(feat_fuse)
+        feat_out, var_out = self.conv_out(feat_fuse, self.conv_bayes)
         if self.aux_mode == 'train':
             feat_out16 = self.conv_out16(feat_cp8)
             feat_out32 = self.conv_out32(feat_cp16)
