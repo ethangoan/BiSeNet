@@ -267,7 +267,7 @@ def initialise_var_params(net):
     weight_squared_sum = torch.zeros(
         net.module.head.conv_out.weight.shape).cuda()
     bias_squared_sum = torch.zeros(net.module.head.conv_out.bias.shape).cuda()
-  if 'bisenetv1' in cfg.model_type:
+  elif 'bisenetv1' in cfg.model_type:
     weight_sum = torch.zeros(net.module.conv_out.conv_out.weight.shape).cuda()
     bias_sum = torch.zeros(net.module.conv_out.conv_out.bias.shape).cuda()
     weight_squared_sum = torch.zeros(

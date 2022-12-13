@@ -2,9 +2,10 @@
 
 
 def format_state_params(state, model_type):
+    print(model_type)
     if model_type == 'bisenetv2':
         updated_state = update_state_bisenetv2(state)
-    if model_type == 'bisenetv1':
+    elif model_type == 'bisenetv1':
         updated_state = update_state_bisenetv1(state)
     elif model_type == 'pidnet':
         updated_state = update_state_pidnet(state)
