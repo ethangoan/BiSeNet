@@ -88,13 +88,13 @@ class BiSeNetOutput(nn.Module):
             # return None for the variance as it will be ignored anyway
             return feat, None
         else:
-            var = self.conv_var(feat ** 2.0)
+            var = self.conv_var(x ** 2.0)
             # if we specified that we want to get a categorical probability out of this layer,
             # than we need to apply the adf softmax.
             if self.prob:
                 feat, var = self.adf_softmax(feat, var)
-            mean = self.upsample(feat)
-            var = self.upsample(var)
+            mean = self.up(feat)
+            var = self.up(var)
             return mean, var
 
 
@@ -309,7 +309,7 @@ class BiSeNetV1(nn.Module):
         feat_sp = self.sp(x)
         feat_fuse = self.ffm(feat_sp, feat_cp8)
 
-        feat_out, var_out = self.conv_out(feat_fuse)
+        feat_out, var_out = self.conv_out(feat_fuse, self.conv_bayes)
         if self.aux_mode == 'train':
             feat_out16 = self.conv_out16(feat_cp8)
             feat_out32 = self.conv_out32(feat_cp16)
