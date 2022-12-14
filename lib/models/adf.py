@@ -4,7 +4,7 @@ from torch import nn
 
 
 class ADFSoftmax(nn.Module):
-    def __init__(self, dim=1, min_variance=0.01):
+    def __init__(self, dim=1, min_variance=0.0001):
         super(ADFSoftmax, self).__init__()
         self.dim = dim
         self.min_variance = min_variance
