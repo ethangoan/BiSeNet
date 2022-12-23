@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 import logging
+from lib.models.adf import ADFSoftmax
 
 
 BatchNorm2d = nn.BatchNorm2d
@@ -90,10 +91,11 @@ class Bottleneck(nn.Module):
             return out
         else:
             return self.relu(out)
-
+import time
 class segmenthead(nn.Module):
 
-    def __init__(self, inplanes, interplanes, outplanes, scale_factor=None, bayes=False, name=None):
+    def __init__(self, inplanes, interplanes, outplanes, scale_factor=None,
+                 bayes=False, prob=False, name=None):
         super(segmenthead, self).__init__()
         self.bn1 = BatchNorm2d(inplanes, momentum=bn_mom)
         self.conv1 = nn.Conv2d(inplanes, interplanes, kernel_size=3, padding=1, bias=False)
@@ -104,6 +106,13 @@ class segmenthead(nn.Module):
         self.conv_var = nn.Conv2d(interplanes, outplanes, kernel_size=1, padding=0, bias=True) if bayes else nn.Identity()
         self.outplanes = outplanes
         self.name = name
+        # if we are being bayesian and want to return a categorical probability, we should set the
+        # output here to be an ADF Softmax operator
+        self.prob = prob
+        print('prob', prob)
+        self.adf_softmax = ADFSoftmax() if prob else nn.Identity()
+
+
 
     def forward(self, x, return_var=False):
 
@@ -111,23 +120,37 @@ class segmenthead(nn.Module):
         feat_basis =  self.relu(self.bn2(x))
         out = self.conv2(feat_basis)
 
-        if self.scale_factor is not None:
-            height = x.shape[-2] * self.scale_factor
-            width = x.shape[-1] * self.scale_factor
-            out = F.interpolate(out,
-                        size=[height, width],
-                        mode='bilinear', align_corners=algc)
         if return_var:
             var = self.conv_var(feat_basis ** 2.0)
+
+            print(torch.sum(torch.isnan(var)).cpu().numpy())
+            # print(self.conv_var.weight.data)
+            # time.sleep(10)
+            if self.prob:
+                out, var = self.adf_softmax(out, var)
+                print(torch.sum(torch.isnan(var)).cpu().numpy())
+                print(var)
+                time.sleep(10)
+                # print('here')
             if self.scale_factor is not None:
                 height = x.shape[-2] * self.scale_factor
                 width = x.shape[-1] * self.scale_factor
+                out = F.interpolate(out,
+                            size=[height, width],
+                            mode='bilinear', align_corners=algc)
                 var = F.interpolate(var,
                             size=[height, width],
                             mode='bilinear', align_corners=algc)
             return out, var
         else:
-            return out
+            if self.scale_factor is not None:
+                height = x.shape[-2] * self.scale_factor
+                width = x.shape[-1] * self.scale_factor
+                out = F.interpolate(out,
+                            size=[height, width],
+                            mode='bilinear', align_corners=algc)
+            # otherwise just return the logit and a None value for the variance
+            return out, None
 
 class DAPPM(nn.Module):
     def __init__(self, inplanes, branch_planes, outplanes, BatchNorm=nn.BatchNorm2d):
@@ -402,6 +425,9 @@ class PIDNet(nn.Module):
         self.augment = augment
         self.aux_mode = aux_mode
         self.bayes = ('bayes' in aux_mode)
+        print(aux_mode)
+        self.apply_adf_softmax = (aux_mode == 'eval_bayes_prob')
+        print(self.apply_adf_softmax)
 
         # I Branch
         self.conv1 =  nn.Sequential(
@@ -472,7 +498,8 @@ class PIDNet(nn.Module):
             self.seghead_p = segmenthead(planes * 2, head_planes, num_classes)
             self.seghead_d = segmenthead(planes * 2, planes, 1)
 
-        self.final_layer = segmenthead(planes * 4, head_planes, num_classes, scale_factor=8, name='final')
+        self.final_layer = segmenthead(planes * 4, head_planes, num_classes, scale_factor=8, name='final',
+                                       bayes=self.bayes, prob=self.apply_adf_softmax)
 
 
         for m in self.modules():
@@ -576,7 +603,9 @@ class PIDNet(nn.Module):
                         size=[height_output, width_output],
                         mode='bilinear', align_corners=algc)
 
-        x_ = self.final_layer(self.dfm(x_, x, x_d))
+        x_, v_ = self.final_layer(self.dfm(x_, x, x_d), return_var=self.bayes)
+        if 'eval_bayes' in self.aux_mode:
+            return x_, v_
 
         if self.augment:
             x_extra_p = self.seghead_p(temp_p)
