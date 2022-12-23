@@ -46,6 +46,10 @@ class ADFSoftmax(nn.Module):
         Mean and variance of the log-normal distribution are computed following
         https://en.wikipedia.org/wiki/Log-normal_distribution."""
         # make sure the minumum variance is present
+        # import time
+        # time.sleep(10)
+        # print(features_variance)
+
         features_variance = self.keep_variance(features_variance)
         log_gaussian_mean = features_mean + 0.5 * features_variance
         log_gaussian_variance = 2 * log_gaussian_mean
@@ -58,8 +62,8 @@ class ADFSoftmax(nn.Module):
         denominator_mean = torch.sum(log_gaussian_mean, dim=self.dim, keepdim=True)
         denominator_variance = torch.sum(log_gaussian_variance, dim=self.dim, keepdim=True)
         # now approximate the mean and variance of this using taylor expansion approx.
-        outputs_mean = log_gaussian_mean / denominator_mean
-        outputs_variance = outputs_mean * torch.sqrt(log_gaussian_variance + denominator_variance)
+        outputs_mean = log_gaussian_mean / (denominator_mean + eps)
+        outputs_variance = outputs_mean * torch.sqrt(log_gaussian_variance + denominator_variance + eps)
         # constant = torch.sum(log_gaussian_mean, dim=self.dim) + eps
         # constant = constant.unsqueeze(self.dim)
         # outputs_mean = log_gaussian_mean/constant
