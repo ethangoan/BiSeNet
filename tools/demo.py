@@ -13,15 +13,49 @@ import scipy
 from os import path as osp
 import os
 import pathlib
+import shutil
+import pathlib
 
 import lib.data.transform_cv2 as T
 from lib.models import model_factory
 from lib.models.adf import ADFSoftmax
+from lib.data.palettes import get_palette
 from configs import set_cfg_from_file
 import matplotlib.pyplot as plt
 
 from collections import namedtuple
 
+import mmcv
+
+
+def show_result(seg, img, palette,
+                opacity=0.5, show=False, out_file=None, win_name=None, wait_time=None):
+    palette = np.array(palette)
+    # assert palette.shape[0] == len(self.CLASSES)
+    # assert palette.shape[1] == 3
+    # assert len(palette.shape) == 2
+    assert 0 < opacity <= 1.0
+    color_seg = np.zeros((seg.shape[0], seg.shape[1], 3), dtype=np.uint8)
+    for label, color in enumerate(palette):
+        color_seg[seg == label, :] = color
+    # convert to BGR
+    color_seg = color_seg[..., ::-1]
+
+    img = img * (1 - opacity) + color_seg * opacity
+    img = img.astype(np.uint8)
+    # if out_file specified, do not show image in window
+    if out_file is not None:
+        show = False
+
+    if show:
+        mmcv.imshow(img, win_name, wait_time)
+    if out_file is not None:
+        mmcv.imwrite(img, out_file)
+
+    if not (show or out_file):
+        warnings.warn('show==False and out_file is not specified, only '
+                      'result image will be returned')
+        return img
 
 #--------------------------------------------------------------------------------
 # Definitions
@@ -192,7 +226,7 @@ def colorEncode(labelmap, colors, mode='RGB'):
         return labelmap_rgb[:, :, ::-1]
     else:
         return labelmap_rgb
-colors = scipy.io.loadmat('color150.mat')['colors']
+# colors = scipy.io.loadmat('color150.mat')['colors']
 
 
 def check_mkdir(path):
@@ -213,11 +247,11 @@ palette = np.random.randint(0, 256, (256, 3), dtype=np.uint8)
 # define model
 net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='eval_bayes')
 net.load_state_dict(torch.load(args.weight_path, map_location='cpu'), strict=False)
-weight_var = torch.load('weight_var.pt')
-bias_var = torch.load('bias_var.pt')
+# weight_var = torch.load('weight_var.pt')
+# bias_var = torch.load('bias_var.pt')
 
-net.head.conv_var.weight.data = weight_var
-net.head.conv_var.bias.data = bias_var
+# net.head.conv_var.weight.data = weight_var
+# net.head.conv_var.bias.data = bias_var
 print(net)
 net.eval()
 net.cuda()
@@ -228,6 +262,7 @@ to_tensor = T.ToTensor(
     std=(0.2112, 0.2148, 0.2115),
 )
 im = cv2.imread(args.img_path)[:, :, ::-1]
+# im = im[0:800, :, :]
 im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
 
 # shape divisor
@@ -244,6 +279,10 @@ logit_mean, logit_var = net(im)
 logit_mean = logit_mean.double()
 logit_var = logit_var.double()
 
+
+logit_dir = osp.abspath(osp.join(f'./{cfg.model_type}_figs', cfg.dataset, 'logit'))
+check_mkdir(logit_dir)
+
 plt.figure()
 for i in range(19):
     out_var_class = logit_var[0, i, :, :]
@@ -254,7 +293,7 @@ for i in range(19):
     out_class = F.softmax(logit_mean, dim=1)[0, i, :, :].cpu().numpy()
     plt.imshow(np.squeeze(out_class))
     plt.title(labels[i].name)
-    plt.savefig(f'logit/im_{i}.png')
+    plt.savefig(osp.join(logit_dir, f'im_{i}.png'))
     plt.clf()
 
 
@@ -264,15 +303,26 @@ out_entropy = -(out * torch.log(out)).mean(1)
 out = out.argmax(1).squeeze().detach().cpu().numpy()
 out_entropy = out_entropy.squeeze().detach().cpu().numpy()
 # pred = palette[out_mean.argmax(1)]
-pred_col = colorEncode(out, colors)
+# pred_col = colorEncode(out, colors)
 
 decision_dir = osp.abspath(osp.join(f'./{cfg.model_type}_figs', cfg.dataset, 'decision'))
 check_mkdir(decision_dir)
 
+# cv2.imwrite(osp.join(decision_dir, 'pred.jpg' ), pred_col)
 
-cv2.imwrite(osp.join(decision_dir, 'pred.jpg' ), pred_col)
 
-plt.imshow(out_entropy / np.max(out_entropy))
+palette = get_palette(cfg.dataset.lower())
+# pred_col = colorEncode(out, palette)
+#
+# cv2.imwrite(osp.join(decision_dir, 'pred_col.jpg' ), pred_col)
+print('here')
+print(im.shape)
+print(out.shape)
+# the swapaxes is to make it in W x H x C
+show_result(out, im.cpu().numpy().squeeze().swapaxes(0,2).swapaxes(0,1), palette, out_file=osp.join(decision_dir, 'pred_col.png' ))
+shutil.copyfile(args.img_path, osp.join(decision_dir, 'im' + pathlib.Path(args.img_path).suffix))
+
+plt.imshow(out_entropy)# / np.max(out_entropy))
 # plt.title('entropy')
 ax = plt.gca()
 ax.set_axis_off()
@@ -293,9 +343,18 @@ for i in range(19):
     plt.savefig(osp.join(decision_dir, f'var_{i}.png'))
     plt.clf()
 
+# class conditional variance for class of interest
+s_var_class = s_var[0, 4, :, :]
+plt.imshow(torch.squeeze(s_var_class ).cpu().numpy())
+ax = plt.gca()
+ax.set_axis_off()
+plt.savefig(osp.join(decision_dir, f'var_class.png'),bbox_inches='tight', pad_inches=0)
+plt.clf()
+
+
 # lets also get the gaussian entropy here
-decision_gaussian_entropy = 0.5 * torch.log((torch.prod(s_var.double(), 1))).squeeze().cpu().numpy()
-plt.imshow(decision_gaussian_entropy)
+decision_gaussian_entropy = 0.5 * torch.log(torch.abs(torch.prod(s_var.double(), 1))).squeeze().cpu().numpy()
+plt.imshow(decision_gaussian_entropy)# / np.max(decision_gaussian_entropy))
 ax = plt.gca()
 ax.set_axis_off()
 # plt.title('decision entropy')
@@ -305,11 +364,17 @@ plt.clf()
 logit_dir = osp.abspath(osp.join(f'./{cfg.model_type}_figs', cfg.dataset, 'logit'))
 check_mkdir(logit_dir)
 # now try and compute the entropy in the Gaussian side of things
-logit_entropy = 0.5 * torch.log((torch.prod(logit_var.double(), 1))).squeeze().cpu().numpy()
+logit_entropy = 0.5 * torch.log(torch.abs(torch.prod(logit_var.double() + 0.1, 1))).squeeze().cpu().numpy()
+logit_entropy[np.isnan(logit_entropy)] = 0
+print(np.sum(np.isnan(logit_entropy)))
+print(np.sum(logit_entropy))
+print(np.max(logit_entropy))
 plt.figure()
-plt.imshow(logit_entropy)
-plt.title('logit entropy')
-plt.savefig(osp.join(logit_dir, f'entropy.png'))
+plt.imshow(logit_entropy / np.max(logit_entropy), cmap='Greys')
+print(np.max(logit_entropy))
+ax = plt.gca()
+ax.set_axis_off()
+plt.savefig(osp.join(logit_dir, f'entropy.png'), bbox_inches='tight', pad_inches=0)
 plt.clf()
 
 for i in range(19):
