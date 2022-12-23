@@ -43,7 +43,7 @@ def add_mean_var_pidnet(state, weight_mean, bias_mean,
     state['module.final_layer.conv2.weight'] = weight_mean
     state['module.final_layer.conv2.bias'] = bias_mean
     state['module.final_layer.conv_var.weight'] = weight_var
-    state['module.final_layer.conv_var.bi   as'] = bias_var
+    state['module.final_layer.conv_var.bias'] = bias_var
     return state
 
 
