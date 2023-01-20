@@ -426,7 +426,7 @@ def evaluate(cfg, weight_pth, mode):
     ## model
     logger.info('setup and restore model')
     net = model_factory[cfg.model_type](cfg.n_cats, aux_mode=mode)
-    net.load_state_dict(torch.load(weight_pth, map_location='cpu'))
+    net.load_state_dict(torch.load(weight_pth, map_location='cpu'), strict=False)
     net.cuda()
 
     #  if dist.is_initialized():
