@@ -1,85 +1,68 @@
-# BiSeNetV1 & BiSeNetV2
+# eu-seg - Embedded Uncertainty for Semantic Segmentation
 
-My implementation of [BiSeNetV1](https://arxiv.org/abs/1808.00897) and [BiSeNetV2](https://arxiv.org/abs/2004.02147).
+This repo contains code for the paper: Uncertainty in Real-Time Semantic Segmentation on Embedded Systems 
 
-
-mIOUs and fps on cityscapes val set:
-| none | ss | ssc | msf | mscf | fps(fp32/fp16/int8) | link |
-|------|:--:|:---:|:---:|:----:|:---:|:----:|
-| bisenetv1 | 75.44 | 76.94 | 77.45 | 78.86 | 25/78/141 | [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v1_city_new.pth) |
-| bisenetv2 | 74.95 | 75.58 | 76.53 | 77.08 | 26/67/95 | [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v2_city.pth) |
-
-mIOUs on cocostuff val2017 set:
-| none | ss | ssc | msf | mscf | link |
-|------|:--:|:---:|:---:|:----:|:----:|
-| bisenetv1 | 31.49 | 31.42 | 32.46 | 32.55 | [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v1_coco_new.pth) |
-| bisenetv2 | 30.49 | 30.55 | 31.81 | 31.73 | [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v2_coco.pth) |
-
-mIOUs on ade20k val set:
-| none | ss | ssc | msf | mscf | link |
-|------|:--:|:---:|:---:|:----:|:----:|
-| bisenetv1 | 36.15 | 36.04 | 37.27 | 36.58 | [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v1_ade20k.pth) |
-| bisenetv2 | 32.53 | 32.43 | 33.23 | 31.72 | [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v2_ade20k.pth) |
-
-Tips: 
-
-1. **ss** means single scale evaluation, **ssc** means single scale crop evaluation, **msf** means multi-scale evaluation with flip augment, and **mscf** means multi-scale crop evaluation with flip evaluation. The eval scales and crop size of multi-scales evaluation can be found in [configs](./configs/).
-
-2. The fps is tested in different way from the paper. For more information, please see [here](./tensorrt).
-
-3. The authors of bisenetv2 used cocostuff-10k, while I used cocostuff-123k(do not know how to say, just same 118k train and 5k val images as object detection). Thus the results maybe different from paper. 
-
-4. The authors did not report results on ade20k, thus there is no official training settings, here I simply provide a "make it work" result. Maybe the results on ade20k can be boosted with better settings.
-
-5. The model has a big variance, which means that the results of training for many times would vary within a relatively big margin. For example, if you train bisenetv2 on cityscapes for many times, you will observe that the result of **ss** evaluation of bisenetv2 varies between 73.1-75.1. 
+[Link to paper](https://arxiv.org/abs/2301.01201)
 
 
-## deploy trained models
+## Description
 
-1. tensorrt  
-You can go to [tensorrt](./tensorrt) for details.  
+This work expands upon the BiSeNet models for real-time semantic segmentation to include a probabilistic classifier block that allows for single pass uncertainty estimates. This has been demonstrated to permit real-time semantic segmentation on Jetson embedded GPU devices from NVIDA.
 
-2. ncnn  
-You can go to [ncnn](./ncnn) for details.  
+This code is based of the implementation of BiSeNet by [CoinCheung](https://github.com/CoinCheung/BiSeNet), which includes instructions for compilation to using TensorRT. This code has also been modified to permit the use of the proposed probabilistic segmentation module. Instructions for TensorRT compilation can be found  [here](./tensorrt). 
 
-3. openvino  
-You can go to [openvino](./openvino) for details.  
+## Training
 
-4. tis  
-Triton Inference Server(TIS) provides a service solution of deployment. You can go to [tis](./tis) for details.
+Training builds upon the pre-existing weights from [here](https://github.com/CoinCheung/BiSeNet). Links to the pre-trained models are as follows,
 
+### Cityscapes
+bisenetv1 [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v1_city_new.pth)
+bisenetv2  [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v2_city.pth) |
 
-## platform
+### CocoStuffs
+bisenetv1 [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v1_coco_new.pth) 
+bisenetv2  [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v2_coco.pth) 
 
-My platform is like this: 
-
-* ubuntu 18.04
-* nvidia Tesla T4 gpu, driver 450.80.02
-* cuda 10.2/11.3
-* cudnn 8
-* miniconda python 3.8.8
-* pytorch 1.11.0
+### ADE20k
+bisenetv1 [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v1_ade20k.pth)
+bisenetv2 [download](https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/model_final_v2_ade20k.pth)
 
 
-## get start
+### Running training for embedded uncertainty
 
-With a pretrained weight, you can run inference on an single image like this: 
+Training is done using the pytorch [Torchrun](https://pytorch.org/docs/stable/elastic/run.html) to allow for distributed training when available. To perform fine tuning to allow addition, you can run the [tools/train_amp.py](./tools/train_amp.py) script.
 
-```
-$ python tools/demo.py --config configs/bisenetv2_city.py --weight-path /path/to/your/weights.pth --img-path ./example.png
+An example
+``` shell
+torchrun  --nnodes=1 --nproc_per_node=1 --rdzv_id=100 --rdzv_backend=c10d --rdzv_endpoint=$MASTER_ADDR:29400  tools/train_amp.py --config ./configs/bayes_bisenetv2_city.py --finetune-from ./models/model_final_v2_city.pth
 ```
 
-This would run inference on the image and save the result image to `./res.jpg`.  
+Where `bayes_bisenetv2_city.py` is a configuration dictionary with training info, and `./models/model_final_v2_city.pth` is a reference to the pretrained model downloaded as described above. Descriptions for preparing datsets can be found below.
 
-Or you can run inference on a video like this:  
+
+## Evaluation 
+
+For evaluation, the [./tools/evaluate.py](./tools/evaluate.py) script is used. An example is provided as,
+
+``` shell
+python tools/evaluate.py --weight-path ./res/bisenetv2_CocoStuff_bayes_model_final.pth --config ./configs/bayes_bisenetv2_coco.py --mode eval_bayes_prob
 ```
-$ python tools/demo_video.py --config configs/bisenetv2_coco.py --weight-path res/model_final.pth --input ./video.mp4 --output res.mp4
+
+The `--mode` argument instructs how the model will operate. If `--mode eval_bayes_prob`, the chosen model will be evaluated using the proposed probabilistic module. If `--mode eval`, it will be evaluated as a normal point-estimate network and will not output uncertainty information.
+
+## Uncertainty Visualisation 
+
+
+For visualisation, the [./tools/demo.py](./tools/demo.py) script is used. An example is provided as,
+
+``` shell
+python tools/demo.py --config ./configs/bisenetv2_city.py --weight-path ./res/model_final.pth  --img-path /home/ethan/exp_data/cityscapes/leftImg8bit/train/cologne/cologne_000000_000019_leftImg8bit.png 
 ```
-This would generate segmentation file as `res.mp4`. If you want to read from camera, you can set `--input camera_id` rather than `input ./video.mp4`.   
 
 
 ## prepare dataset
 
+These instructions are laregely the same as from  [CoinCheung](https://github.com/CoinCheung/BiSeNet), but are listed here for completeness.
 1.cityscapes  
 
 Register and download the dataset from the official [website](https://www.cityscapes-dataset.com/). Then decompress them into the `datasets/cityscapes` directory:  
@@ -137,36 +120,5 @@ This will print some of the information of your dataset.
 
 Then you need to change the field of `im_root` and `train/val_im_anns` in the config file. I prepared a demo config file for you named [`bisenet_customer.py`](./configs/bisenet_customer.py). You can start from this conig file.
 
-
-## train
-
-Training commands I used to train the models can be found in [here](./dist_train.sh).
-
-Note:  
-1. though `bisenetv2` has fewer flops, it requires much more training iterations. The the training time of `bisenetv1` is shorter.
-2. I used overall batch size of 16 to train all models. Since cocostuff has 171 categories, it requires more memory to train models on it. I split the 16 images into more gpus than 2, as I do with cityscapes.
-
-
-## finetune from trained model
-
-You can also load the trained model weights and finetune from it, like this:
-```
-$ export CUDA_VISIBLE_DEVICES=0,1
-$ torchrun --nproc_per_node=2 tools/train_amp.py --finetune-from ./res/model_final.pth --config ./configs/bisenetv2_city.py # or bisenetv1
-```
-
-
-## eval pretrained models
-You can also evaluate a trained model like this: 
-```
-$ python tools/evaluate.py --config configs/bisenetv1_city.py --weight-path /path/to/your/weight.pth
-```
-or you can use multi gpus:  
-```
-$ torchrun --nproc_per_node=2 tools/evaluate.py --config configs/bisenetv1_city.py --weight-path /path/to/your/weight.pth
-```
-
-
-### Be aware that this is the refactored version of the original codebase. You can go to the `old` directory for original implementation if you need, though I believe you will not need it.
-
-
+## Compilation with TensorRT
+Instructions for compilation with TensorRT can be found [here](./tensorrt/README.md)
