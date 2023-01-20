@@ -29,8 +29,6 @@ from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
 from tools.format_state import format_state_params, add_mean_var_to_state
 
-from bayesian_torch.models.dnn_to_bnn import get_kl_loss
-
 torch.autograd.set_detect_anomaly(True)
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -233,61 +231,26 @@ def nan_hook(self, inp, output):
                          inf_mask.nonzero(), "where:",
                          out[inf_mask.nonzero()[:, 0].unique(sorted=True)])
 
-
-def kl_div(mu_q, sigma_q, mu_p, sigma_p):
-  """Calculates kl divergence between two gaussians (Q || P)
-         Parameters:
-              * mu_q: torch.Tensor -> mu parameter of distribution Q
-              * sigma_q: torch.Tensor -> sigma parameter of distribution Q
-              * mu_p: float -> mu parameter of distribution P
-              * sigma_p: float -> sigma parameter of distribution P
-         returns torch.Tensor of shape 0
-         """
-  kl = torch.log(sigma_p) - torch.log(
-      sigma_q) + (sigma_q**2 + (mu_q - mu_p)**2) / (2 * (sigma_p**2)) - 0.5
-  return kl.mean()
-
-
-def kl_loss(mu_kernel, rho_kernel, mu_bias, rho_bias, prior_weight_mu,
-            prior_weight_sigma, prior_bias_mu, prior_bias_sigma):
-  sigma_weight = torch.log1p(torch.exp(rho_kernel))
-  print(sigma_weight.device)
-  kl = kl_div(mu_kernel, sigma_weight, prior_weight_mu, prior_weight_sigma)
-  print(f'kl weight {kl.device}')
-  sigma_bias = torch.log1p(torch.exp(rho_bias))
-  print(f'kl bias {kl.device}')
-  kl += kl_div(mu_bias, sigma_bias, prior_bias_mu, prior_bias_sigma)
-  return kl
-
-
 def initialise_var_params(net):
   if 'bisenetv2' in cfg.model_type:
-    weight_sum = torch.zeros(net.module.head.conv_out.weight.shape).cuda()
-    bias_sum = torch.zeros(net.module.head.conv_out.bias.shape).cuda()
     weight_squared_sum = torch.zeros(
         net.module.head.conv_out.weight.shape).cuda()
     bias_squared_sum = torch.zeros(net.module.head.conv_out.bias.shape).cuda()
   elif 'bisenetv1' in cfg.model_type:
-    weight_sum = torch.zeros(net.module.conv_out.conv_out.weight.shape).cuda()
-    bias_sum = torch.zeros(net.module.conv_out.conv_out.bias.shape).cuda()
     weight_squared_sum = torch.zeros(
         net.module.conv_out.conv_out.weight.shape).cuda()
     bias_squared_sum = torch.zeros(net.module.conv_out.conv_out.bias.shape).cuda()
   elif 'pidnet' in cfg.model_type:
-    weight_sum = torch.zeros(net.module.final_layer.conv2.weight.shape).cuda()
-    bias_sum = torch.zeros(net.module.final_layer.conv2.bias.shape).cuda()
     weight_squared_sum = torch.zeros(
         net.module.final_layer.conv2.weight.shape).cuda()
     bias_squared_sum = torch.zeros(
         net.module.final_layer.conv2.bias.shape).cuda()
   else:
     # is enet
-    weight_sum = torch.zeros(net.module.fullconv.weight.shape).cuda()
     weight_squared_sum = torch.zeros(net.module.fullconv.weight.shape).cuda()
-    bias_sum = None
     bias_squared_sum = None
   step_count = 0
-  return weight_sum, bias_sum, weight_squared_sum, bias_squared_sum, step_count
+  return weight_squared_sum, bias_squared_sum, step_count
 
 
 def update_var_params(net, weight_mean, bias_mean, weight_squared_sum,
@@ -401,9 +364,8 @@ def train():
    loss_aux_meters) = set_meters()
   optim, lr_schdr = get_lr_scheduler(optim)
   # initialising the variance tracking parameters
-  (weight_sum, bias_sum, weight_squared_sum, bias_squared_sum,
-   step_count) = initialise_var_params(net)
-
+  weight_squared_sum, bias_squared_sum, step_count = initialise_var_params(net)
+  # initialise the mean from pretrained network
   w_mean, b_mean = init_mean(net, cfg)
 
   for param in net.parameters():
@@ -429,14 +391,11 @@ def train():
         # it isn't actually tracking anything important
         # or tracking anything really
         loss_aux = None#[crit(0, 0) for crit in criteria_aux]
-        # TODO include number of gpus here
         loss = loss_pre
-        # kl_item = kl.item()
       elif 'enet' == cfg.model_type:
         logits = net(im)
         loss_pre = criteria_pre(logits, lb)
         scaler.scale(loss_pre).backward()
-        kl_item = 0
         loss = loss_pre
         # loss aux is set just as a dummy varible
         # it isn't actually tracking anything important
@@ -450,7 +409,6 @@ def train():
             crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)
         ]
         loss = loss_pre + sum(loss_aux)
-        kl_item = 0
     scaler.scale(loss).backward()
     scaler.step(optim)
     scaler.update()
@@ -489,23 +447,11 @@ def train():
 
   if 'bayes' in cfg.model_config:
     # divide the sum terms by the number of iterations to get the value for the SWAG params
-    # weight_mean = weight_sum / step_count
-    # bias_mean = bias_sum / step_count
-    # weight_squared_sum = weight_squared_sum / step_count
-    # bias_squared_sum = bias_squared_sum / step_count
-    # weight_var = (weight_squared_sum - torch.square(weight_mean))
-    # bias_var = bias_squared_sum - torch.square(bias_mean)
     weight_var =  weight_squared_sum / (step_count - 1)
     bias_var =  bias_squared_sum / (step_count - 1)
 
-
-
-    # torch.save(weight_mean,
-    #            osp.join(cfg.respth, f'{cfg.model_type}_weight_mean.pt'))
     torch.save(weight_var,
                osp.join(cfg.respth, f'{cfg.model_type}_weight_var.pt'))
-    # torch.save(bias_mean, osp.join(cfg.respth,
-    #                                f'{cfg.model_type}_bias_mean.pt'))
     torch.save(bias_var, osp.join(cfg.respth, f'{cfg.model_type}_bias_var.pt'))
     print('weight_var = ', weight_var)
     print('bias_var = ', bias_var)
@@ -525,9 +471,6 @@ def train():
   # if dist.get_rank() == 0:
   #   torch.save(state, save_pth)
 
-  # net.module.head.conv_out.weight.data = w_mean
-  # net.module.head.conv_out.bias.data = b_mean
-  # # net.module.head.conv_out.weight.data =  weight_mean
   # logger.info('\nevaluating the final model')
   # torch.cuda.empty_cache()
   # iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
