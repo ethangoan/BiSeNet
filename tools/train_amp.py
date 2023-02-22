@@ -287,6 +287,7 @@ def set_trainable_params(net):
           'module.head.conv_out.bias',
           'module.conv_out.conv_out.weight',  # bisenetv1
           'module.conv_out.conv_out.bias'
+          'seg_head.0.conv_out.weight' # ppliteseg
       ]
     for name, param in net.named_parameters():
       if not any(name == x for x in grad_list):
