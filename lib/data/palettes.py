@@ -299,6 +299,8 @@ def get_classes(dataset):
 
 def get_palette(dataset):
     """Get class palette (RGB) of a dataset."""
+    if dataset.lower() == 'enetcityscapes':
+        dataset = 'cityscapes'
     alias2name = {}
     for name, aliases in dataset_aliases.items():
         for alias in aliases:

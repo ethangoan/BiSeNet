@@ -9,6 +9,8 @@ def format_state_params(state, model_type):
         updated_state = update_state_bisenetv1(state)
     elif model_type == 'pidnet':
         updated_state = update_state_pidnet(state)
+    elif model_type == 'enet':
+        updated_state = update_state_enet(state)
     else:
         raise ValueError(f"incorrect model_type {model_type} specified")
     return updated_state
@@ -36,6 +38,12 @@ def add_mean_var_to_state(model_type, state, weight_mean, bias_mean,
                                             bias_mean,
                                             weight_var,
                                             bias_var)
+    elif model_type == 'enet':
+        updated_state = add_mean_var_enet(state,
+                                          weight_mean,
+                                          bias_mean,
+                                          weight_var,
+                                          bias_var)
     return updated_state
 
 def add_mean_var_pidnet(state, weight_mean, bias_mean,
@@ -45,6 +53,14 @@ def add_mean_var_pidnet(state, weight_mean, bias_mean,
     state['final_layer.conv_var.weight'] = weight_var
     state['final_layer.conv_var.bias'] = bias_var
     return state
+
+def add_mean_var_enet(state, weight_mean, bias_mean,
+                        weight_var, bias_var):
+    state['transposed_conv.weight'] = weight_mean
+    state['out_var.weight'] = weight_var
+    return state
+
+
 
 
 def add_var_bisenetv2(state, weight_mean, bias_mean,
@@ -87,6 +103,17 @@ def update_state_bisenetv2(state):
 def update_state_bisenetv1(state):
     # actually don't need to do anything here for bisenetv1 :)
     return state
+
+def update_state_enet(state):
+    # actually don't need to do anything here for bisenetv1 :)
+    state_dict = state['state_dict']
+    # if state_dict['transposed_conv.weight'].shape[1] == 20:
+    #     state_dict['transposed_conv.weight'] =  state_dict['transposed_conv.weight'][:, 1::, :, :]
+    # print(state_dict['transposed_conv.weight'].shape)
+    return state_dict
+
+
+
 
 
 

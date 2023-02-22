@@ -140,6 +140,24 @@ class ToTensor(object):
         return dict(im=im, lb=lb)
 
 
+class ENetToTensor(object):
+    '''
+    For Enet will just scale to [0, 1]
+    '''
+    def __init__(self):
+        pass
+
+    def __call__(self, im_lb):
+        im, lb = im_lb['im'], im_lb['lb']
+        im = im.transpose(2, 0, 1).astype(np.float32)
+        im = im.astype(np.float32)
+        im = torch.from_numpy(im).div_(255)
+        if not lb is None:
+            lb = torch.from_numpy(lb.astype(np.int64).copy()).clone()
+        return dict(im=im, lb=lb)
+
+
+
 class Compose(object):
 
     def __init__(self, do_list):
