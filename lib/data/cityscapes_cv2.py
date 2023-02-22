@@ -58,7 +58,7 @@ labels_info = [
 class CityScapes(BaseDataset):
     '''
     '''
-    def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
+    def __init__(self, dataroot, annpath, trans_func=None, mode='train', model_type='bisenetv2'):
         super(CityScapes, self).__init__(
                 dataroot, annpath, trans_func, mode)
         self.n_cats = 19
@@ -67,11 +67,25 @@ class CityScapes(BaseDataset):
         for el in labels_info:
             self.lb_map[el['id']] = el['trainId']
 
-        self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223), # city, rgb
-            std=(0.2112, 0.2148, 0.2115),
-        )
-
+        if model_type == 'bisenetv2':
+            self.to_tensor = T.ToTensor(
+                mean=(0.3257, 0.3690, 0.3223), # city, rgb
+                std=(0.2112, 0.2148, 0.2115),
+                )
+        elif model_type == 'pidnet':
+            self.to_tensor = T.ToTensor(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            )
+        elif model_type == 'enet':
+            self.to_tensor = T.ToTensor(
+                mean= [0.28689529, 0.32513294, 0.28389176],
+                # std=[1.0, 1.0, 1.0],
+                # mean= [0, 0, 0],
+                std=[0.229, 0.224, 0.225],
+            )
+        else:
+            raise ValueError(f'Unsupported model type specified {model_type}')
 
 
 if __name__ == "__main__":
