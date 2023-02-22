@@ -1,5 +1,4 @@
 
-## bisenetv2
 cfg = dict(
     model_type='enet',
     model_config='bayes',

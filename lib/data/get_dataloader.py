@@ -8,6 +8,8 @@ from lib.data.sampler import RepeatedDistSampler
 
 
 from lib.data.cityscapes_enet import ENetCityScapes, PILToLongTensor
+from lib.data.camvid_enet import ENetCamVid
+from lib.data.cityscapes_pidnet import PIDNetCityScapes
 from lib.data.cityscapes_cv2 import CityScapes
 from lib.data.coco import CocoStuff
 from lib.data.ade20k import ADE20k
@@ -41,12 +43,26 @@ def get_data_loader(cfg, mode='train'):
         image_transform = transforms.Compose(
             [transforms.Resize((cfg.cropsize[0], cfg.cropsize[1])),
              transforms.ToTensor()])
-
         label_transform = transforms.Compose([
             transforms.Resize((cfg.cropsize[0], cfg.cropsize[1]), Image.NEAREST),
             PILToLongTensor()
             ])
         ds = ENetCityScapes(cfg.im_root, transform=image_transform, label_transform=label_transform,  mode=mode)
+    elif cfg.dataset == 'PIDNetCityScapes':
+        ds = PIDNetCityScapes(cfg.im_root, cfg.list_path,
+                              crop_size=cfg.cropsize,
+                              multi_scale=(mode=='train'),
+                              flip=(mode=='train'))
+    elif cfg.dataset == 'ENetCamVid':
+        image_transform = transforms.Compose(
+            [transforms.Resize((cfg.cropsize[0], cfg.cropsize[1])),
+             transforms.ToTensor()])
+
+        label_transform = transforms.Compose([
+            transforms.Resize((cfg.cropsize[0], cfg.cropsize[1]), Image.NEAREST),
+            PILToLongTensor()
+            ])
+        ds = ENetCamVid(cfg.im_root, transform=image_transform, label_transform=label_transform,  mode=mode)
     else:
         # for cityscapes want to include the model type  as this affects how the
         # mean and variance are used
