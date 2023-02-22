@@ -245,6 +245,10 @@ def initialise_var_params(net):
         net.module.final_layer.conv2.weight.shape).cuda()
     bias_squared_sum = torch.zeros(
         net.module.final_layer.conv2.bias.shape).cuda()
+  elif 'enet' in cfg.model_type:
+    weight_squared_sum = torch.zeros(
+        net.module.transposed_conv.weight.shape).cuda()
+    bias_squared_sum = None
   else:
     # is enet
     weight_squared_sum = torch.zeros(net.module.fullconv.weight.shape).cuda()
@@ -268,6 +272,10 @@ def update_var_params(net, weight_mean, bias_mean, weight_squared_sum,
     # bias_sum += net.module.final_layer.conv2.bias
     weight_squared_sum += torch.square(net.module.final_layer.conv2.weight - weight_mean)
     bias_squared_sum += torch.square(net.module.final_layer.conv2.bias - bias_mean)
+  elif 'enet' in cfg.model_type:
+    # now update our sum parameters for the  weight and bias terms
+    weight_squared_sum += torch.square(net.module.transposed_conv.weight - weight_mean)
+    bias_squared_sum = None
   else:
     raise NotImplementedError()
   # increment the step_count
@@ -286,7 +294,8 @@ def set_trainable_params(net):
           'module.head.conv_out.weight',  # bisenetv2
           'module.head.conv_out.bias',
           'module.conv_out.conv_out.weight',  # bisenetv1
-          'module.conv_out.conv_out.bias'
+          'module.conv_out.conv_out.bias',
+          'module.transposed_conv.weight',  # Enet
       ]
     for name, param in net.named_parameters():
       if not any(name == x for x in grad_list):
@@ -336,6 +345,9 @@ def init_mean(net, cfg):
   elif cfg.model_type == 'pidnet':
     w_mean = net.module.final_layer.conv2.weight.data.detach().clone()
     b_mean = net.module.final_layer.conv2.bias.data.detach().clone()
+  if cfg.model_type == 'enet':
+    w_mean = net.module.transposed_conv.weight.data.detach().clone()
+    b_mean = None
   else:
     raise NotImplementedError(
       f'Extracting mean not specified for your model {cfg.model_type}')
@@ -448,13 +460,20 @@ def train():
   if 'bayes' in cfg.model_config:
     # divide the sum terms by the number of iterations to get the value for the SWAG params
     weight_var =  weight_squared_sum / (step_count - 1)
-    bias_var =  bias_squared_sum / (step_count - 1)
+    # bias is None for Enet
+    if bias_squared_sum is not None:
+      bias_var =  bias_squared_sum / (step_count - 1)
+    else:
+      bias_var = None
 
     torch.save(weight_var,
                osp.join(cfg.respth, f'{cfg.model_type}_weight_var.pt'))
     torch.save(bias_var, osp.join(cfg.respth, f'{cfg.model_type}_bias_var.pt'))
     print('weight_var = ', weight_var)
+    print(f'weight_var -> max = {torch.max(weight_var)} mean =  {torch.mean(weight_var)}, min = {torch.min(weight_var)}')
+
     print('bias_var = ', bias_var)
+    # print(f'bias_var -> max = {torch.max(bias_var)} mean =  {torch.mean(bias_var)}, min = {torch.min(bias_var)}')
     bayes_state = add_mean_var_to_state(cfg.model_type, net.module.state_dict(),
                                         w_mean, b_mean, weight_var,
                                         bias_var)
