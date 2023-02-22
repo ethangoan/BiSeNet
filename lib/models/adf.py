@@ -1,16 +1,20 @@
 import torch
 from torch import nn
 
+import numpy as np
+
+import time
 
 
 class ADFSoftmax(nn.Module):
-    def __init__(self, dim=1, min_variance=0.0001):
+    def __init__(self, dim=1, min_variance=1e-4):
         super(ADFSoftmax, self).__init__()
         self.dim = dim
         self.min_variance = min_variance
 
     def keep_variance(self, x):
-        return x + self.min_variance
+        return torch.clamp(x, min=self.min_variance, max=None)
+        # return x + self.min_variance
 
 
     # def forward(self, features_mean, features_variance, eps=1e-5):
