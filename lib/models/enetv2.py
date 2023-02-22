@@ -542,7 +542,8 @@ class UpsamplingBottleneck(nn.Module):
 
         # Remember that the stride is the same as the kernel_size, just like
         # the max pooling layers
-        self.main_unpool1 = MaxUnpool2d(kernel_size=2)
+        # self.main_unpool1 = MaxUnpool2d(kernel_size=2)
+        self.main_unpool1 = nn.Upsample(scale_factor=2)
 
         # Extension branch - 1x1 convolution, followed by a regular, dilated or
         # asymmetric convolution, followed by another 1x1 convolution. Number
@@ -579,7 +580,7 @@ class UpsamplingBottleneck(nn.Module):
         # Main branch shortcut
         main = self.main_conv1(x)
         main = self.main_unpool1(
-            main, max_indices, output_size=output_size)
+            main)#, max_indices, output_size=output_size)
 
         # Extension branch
         ext = self.ext_conv1(x)
