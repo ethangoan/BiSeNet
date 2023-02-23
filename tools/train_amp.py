@@ -249,6 +249,10 @@ def initialise_var_params(net):
     weight_squared_sum = torch.zeros(
         net.module.transposed_conv.weight.shape).cuda()
     bias_squared_sum = None
+  elif 'ppliteseg' in cfg.model_type:
+    weight_squared_sum = torch.zeros(
+        net.module.seg_head.conv_out.weight.shape).cuda()
+    bias_squared_sum = None
   else:
     # is enet
     weight_squared_sum = torch.zeros(net.module.fullconv.weight.shape).cuda()
@@ -276,6 +280,10 @@ def update_var_params(net, weight_mean, bias_mean, weight_squared_sum,
     # now update our sum parameters for the  weight and bias terms
     weight_squared_sum += torch.square(net.module.transposed_conv.weight - weight_mean)
     bias_squared_sum = None
+  elif 'ppliteseg' in cfg.model_type:
+    # now update our sum parameters for the  weight and bias terms
+    weight_squared_sum += torch.square(net.module.seg_head.conv_out.weight - weight_mean)
+    bias_squared_sum = None
   else:
     raise NotImplementedError()
   # increment the step_count
@@ -294,8 +302,8 @@ def set_trainable_params(net):
           'module.head.conv_out.weight',  # bisenetv2
           'module.head.conv_out.bias',
           'module.conv_out.conv_out.weight',  # bisenetv1
-          'module.conv_out.conv_out.bias'
-          'seg_head.0.conv_out.weight' # ppliteseg
+          'module.conv_out.conv_out.bias',
+          'module.seg_head.conv_out.weight', # ppliteseg
           'module.transposed_conv.weight',  # Enet
       ]
     for name, param in net.named_parameters():
@@ -346,10 +354,10 @@ def init_mean(net, cfg):
   elif cfg.model_type == 'pidnet':
     w_mean = net.module.final_layer.conv2.weight.data.detach().clone()
     b_mean = net.module.final_layer.conv2.bias.data.detach().clone()
-  if cfg.model_type == 'enet':
+  elif cfg.model_type == 'enet':
     w_mean = net.module.transposed_conv.weight.data.detach().clone()
     b_mean = None
-  if cfg.model_type == 'ppliteseg':
+  elif cfg.model_type == 'ppliteseg':
     w_mean = net.module.seg_head.conv_out.weight.data.detach().clone()
     b_mean = None
   else:

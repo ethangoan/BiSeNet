@@ -72,7 +72,7 @@ class CityScapes(BaseDataset):
                 mean=(0.3257, 0.3690, 0.3223), # city, rgb
                 std=(0.2112, 0.2148, 0.2115),
                 )
-        elif model_type == 'pidnet':
+        elif model_type == 'pidnet' or model_type == 'ppliteseg':
             self.to_tensor = T.ToTensor(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
