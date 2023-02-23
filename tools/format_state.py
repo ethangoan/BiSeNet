@@ -11,7 +11,7 @@ def format_state_params(state, model_type):
         updated_state = update_state_pidnet(state)
     elif model_type == 'enet':
         updated_state = update_state_enet(state)
-    elif model_type == 'ppliteseg':
+    elif 'ppliteseg' in model_type:
         updated_state = update_state_ppliteseg(state)
     else:
         raise ValueError(f"incorrect model_type {model_type} specified")
@@ -46,7 +46,7 @@ def add_mean_var_to_state(model_type, state, weight_mean, bias_mean,
                                           bias_mean,
                                           weight_var,
                                           bias_var)
-    elif model_type == 'ppliteseg':
+    elif 'ppliteseg' in model_type:
         updated_state = add_mean_var_ppliteseg(state,
                                           weight_mean,
                                           bias_mean,

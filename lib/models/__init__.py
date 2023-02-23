@@ -4,7 +4,7 @@ from .bisenetv1 import BiSeNetV1
 from .bisenetv2 import BiSeNetV2, BayesBiSeNetV2
 from .enetv2 import ENet
 from .pidnet import PIDNet
-from .ppliteseg import PPLiteSegT
+from .ppliteseg import PPLiteSegT, PPLiteSegB
 
 
 model_factory = {
@@ -14,5 +14,6 @@ model_factory = {
     'enet': ENet,
     'pidnet': PIDNet,
     'bayes_pidnet': PIDNet,
-    'ppliteseg': PPLiteSegT
+    'ppliteseg': PPLiteSegT,
+    'pplitesegb': PPLiteSegB
 }

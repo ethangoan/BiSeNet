@@ -357,7 +357,7 @@ def init_mean(net, cfg):
   elif cfg.model_type == 'enet':
     w_mean = net.module.transposed_conv.weight.data.detach().clone()
     b_mean = None
-  elif cfg.model_type == 'ppliteseg':
+  elif 'ppliteseg' in cfg.model_type:
     w_mean = net.module.seg_head.conv_out.weight.data.detach().clone()
     b_mean = None
   else:

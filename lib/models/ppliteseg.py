@@ -359,10 +359,11 @@ class PPLiteSegBase(SegmentationModule):
 
 
 class PPLiteSegB(PPLiteSegBase):
-    def __init__(self, arch_params: HpmStruct):
-        backbone = STDC2Backbone(in_channels=get_param(arch_params, "in_channels", 3), out_down_ratios=[8, 16, 32])
+
+    def __init__(self, num_classes: int, dropout: float=0.0, use_aux_heads: bool=False, aux_mode: str='train'):
+        backbone = STDC2Backbone(in_channels=3, out_down_ratios=[8, 16, 32])
         super().__init__(
-            num_classes=get_param(arch_params, "num_classes"),
+            num_classes=num_classes,
             backbone=backbone,
             projection_channels_list=[96, 128, 128],
             sppm_inter_channels=128,
@@ -376,10 +377,11 @@ class PPLiteSegB(PPLiteSegBase):
             head_scale_factor=8,
             head_upsample_mode="bilinear",
             head_mid_channels=64,
-            dropout=get_param(arch_params, "dropout", 0.0),
-            use_aux_heads=get_param(arch_params, "use_aux_heads", False),
+            dropout=dropout,
+            use_aux_heads=use_aux_heads,
             aux_hidden_channels=[32, 64, 64],
             aux_scale_factors=[8, 16, 32],
+            aux_mode=aux_mode
         )
 
 
