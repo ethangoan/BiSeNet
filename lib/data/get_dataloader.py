@@ -10,6 +10,7 @@ from lib.data.sampler import RepeatedDistSampler
 from lib.data.cityscapes_enet import ENetCityScapes, PILToLongTensor
 from lib.data.camvid_enet import ENetCamVid
 from lib.data.cityscapes_pidnet import PIDNetCityScapes
+from lib.data.camvid_pidnet import PIDNetCamVid
 from lib.data.cityscapes_cv2 import CityScapes
 from lib.data.coco import CocoStuff
 from lib.data.ade20k import ADE20k
@@ -53,6 +54,13 @@ def get_data_loader(cfg, mode='train'):
                               crop_size=cfg.cropsize,
                               multi_scale=(mode=='train'),
                               flip=(mode=='train'))
+    elif cfg.dataset == 'PIDNetCamVid':
+        list_path = cfg.train_path if (mode == 'train') else cfg.val_path
+        ds = PIDNetCamVid(cfg.im_root, list_path,
+                          crop_size=cfg.cropsize,
+                          multi_scale=(mode=='train'),
+                          flip=(mode=='train'))
+
     elif cfg.dataset == 'ENetCamVid':
         image_transform = transforms.Compose(
             [transforms.Resize((cfg.cropsize[0], cfg.cropsize[1])),
@@ -85,8 +93,8 @@ def get_data_loader(cfg, mode='train'):
         dl = DataLoader(
             ds,
             batch_sampler=batchsampler,
-            num_workers=8,
-            pin_memory=True,
+            num_workers=6,
+            pin_memory=False,
         )
     else:
         dl = DataLoader(

@@ -7,6 +7,7 @@ import os
 import os.path as osp
 import json
 
+from PIL import Image
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
@@ -16,7 +17,7 @@ import numpy as np
 
 import lib.data.transform_cv2 as T
 from lib.data.base_dataset import BaseDataset
-
+import matplotlib.pyplot as plt
 
 
 class CamVid(BaseDataset):
@@ -42,13 +43,23 @@ class CamVid(BaseDataset):
         label = np.ones(color_map.shape[:2])*self.lb_ignore
         for i, v in enumerate(self.color_list):
             label[(color_map == v).sum(2)==3] = i
+            # print(np.sum(label == i))
         # label = F.one_hot(label, self.n_cats).numpy()
         return label.astype(np.uint8)
 
+
     def get_image(self, impth, lbpth):
+        # img = np.array(
+        #     Image.open(impth).convert('RGB'))
+        # label = np.array(
+        #     Image.open(os.path.join(lbpth)).convert('BGR'))
         img = cv2.imread(impth)[:, :, ::-1].copy()
-        label = cv2.imread(lbpth)[:, :, ::-1].copy()
+        label = cv2.imread(lbpth)[:, :, :].copy()
+        # print(label)
+        # print(img)
+
         label = self.color2label(label)
+        print(np.min(label))
         return img, label
 
 

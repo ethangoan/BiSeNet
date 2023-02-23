@@ -49,6 +49,7 @@ class BaseDataset(Dataset):
             im_lb = self.trans_func(im_lb)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
+        # print(torch.min(label))
         return img.detach(), label.unsqueeze(0).detach()
 
     def get_image(self, impth, lbpth):
